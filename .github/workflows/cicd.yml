@@ -34,92 +34,62 @@ jobs:
       quality-result: ${{ needs.ci.result }}
 
   preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) && needs.ci.outputs.cdk-enabled == 'true'
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) && needs.ci.outputs.preview-environment-enabled == 'true'
     needs: ci
     permissions:
       contents: read
-      id-token: write
       pull-requests: read
-    uses: ./.github/workflows/reusable-aws-cdk.yml
+    uses: ./.github/workflows/reusable-cloudflare-deploy.yml
     with:
       enabled: true
-      operation: diff
-      preview-branch: ${{ github.event.pull_request.head.ref }}
-      stack-environment: ${{ format('pr-{0}', github.event.pull_request.number) }}
-      region: ${{ needs.ci.outputs.cdk-region }}
+      project-path: ${{ needs.ci.outputs.cloudflare-project-path }}
+      deploy-command: ${{ needs.ci.outputs.cloudflare-deploy-command }}
       github-environment: preview
-      source-ref: ${{ github.event.pull_request.head.sha }}
-      expected-pr-state: open
     secrets:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-
-  preview-environment:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) && needs.ci.outputs.preview-environment-enabled == 'true'
-    needs: [ci, preview]
-    permissions:
-      contents: read
-      id-token: write
-      pull-requests: read
-    uses: ./.github/workflows/reusable-aws-cdk.yml
-    with:
-      enabled: true
-      operation: deploy
-      preview-branch: ${{ github.event.pull_request.head.ref }}
-      stack-environment: ${{ format('pr-{0}', github.event.pull_request.number) }}
-      region: ${{ needs.ci.outputs.cdk-region }}
-      github-environment: preview
-      source-ref: ${{ github.event.pull_request.head.sha }}
-      expected-pr-state: open
-    secrets:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   deploy-development:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci.outputs.development-enabled == 'true') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'development' && needs.ci.outputs.development-enabled == 'true')
     needs: ci
     permissions:
       contents: read
-      id-token: write
-    uses: ./.github/workflows/reusable-aws-cdk.yml
+    uses: ./.github/workflows/reusable-cloudflare-deploy.yml
     with:
       enabled: true
-      operation: deploy
-      stack-name: app-development
-      stack-environment: development
-      region: ${{ needs.ci.outputs.cdk-region }}
+      project-path: ${{ needs.ci.outputs.cloudflare-project-path }}
+      deploy-command: ${{ needs.ci.outputs.cloudflare-deploy-command }}
       github-environment: development
     secrets:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   deploy-staging:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/stg' && needs.ci.outputs.staging-enabled == 'true') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && needs.ci.outputs.staging-enabled == 'true')
     needs: ci
     permissions:
       contents: read
-      id-token: write
-    uses: ./.github/workflows/reusable-aws-cdk.yml
+    uses: ./.github/workflows/reusable-cloudflare-deploy.yml
     with:
       enabled: true
-      operation: deploy
-      stack-name: app-staging
-      stack-environment: staging
-      region: ${{ needs.ci.outputs.cdk-region }}
+      project-path: ${{ needs.ci.outputs.cloudflare-project-path }}
+      deploy-command: ${{ needs.ci.outputs.cloudflare-deploy-command }}
       github-environment: staging
     secrets:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   deploy-production:
     if: (github.event_name == 'push' && github.ref == 'refs/heads/prod' && needs.ci.outputs.production-enabled == 'true') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production' && needs.ci.outputs.production-enabled == 'true')
     needs: ci
     permissions:
       contents: read
-      id-token: write
-    uses: ./.github/workflows/reusable-aws-cdk.yml
+    uses: ./.github/workflows/reusable-cloudflare-deploy.yml
     with:
       enabled: true
-      operation: deploy
-      stack-name: app-production
-      stack-environment: production
-      region: ${{ needs.ci.outputs.cdk-region }}
+      project-path: ${{ needs.ci.outputs.cloudflare-project-path }}
+      deploy-command: ${{ needs.ci.outputs.cloudflare-deploy-command }}
       github-environment: production
     secrets:
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

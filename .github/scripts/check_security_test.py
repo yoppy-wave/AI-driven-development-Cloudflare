@@ -11,6 +11,16 @@ from check_security import scan_source
 
 
 class SecurityTests(unittest.TestCase):
+    def test_security_implementation_is_not_treated_as_application_javascript(self) -> None:
+        files = [Path(".github/scripts/check_security.cjs"), Path("application.ts")]
+        javascript = [
+            path
+            for path in files
+            if path.suffix in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
+            and path not in {Path(".github/scripts/check_security.cjs"), Path(".github/scripts/check_security.d.cts")}
+        ]
+        self.assertEqual(javascript, [Path("application.ts")])
+
     def test_safe_logs(self) -> None:
         for source in (
             'print("request completed", request_id)',

@@ -68,10 +68,10 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("1 failed", result.stdout)
 
     def test_node_test_gate_excludes_lint_and_deduplicates_typecheck_build(self) -> None:
-        self.write("package.json", '{"scripts":{"test":"jest", "lint":"eslint .", "typecheck":"tsc --noEmit", "build":"tsc --noEmit", "synth":"cdk synth"}}')
+        self.write("package.json", '{"scripts":{"test":"jest", "lint":"eslint .", "typecheck":"tsc --noEmit", "build":"tsc --noEmit"}}')
         with patch.object(run_regression, "install_node", return_value=["npm"]), patch.object(run_regression, "run") as run:
             run_regression.node_project(self.root, Path("."))
-        self.assertEqual([call.args[0] for call in run.call_args_list], [["npm", "run", "test"], ["npm", "run", "typecheck"], ["npm", "run", "synth"]])
+        self.assertEqual([call.args[0] for call in run.call_args_list], [["npm", "run", "test"], ["npm", "run", "typecheck"]])
 
 
 if __name__ == "__main__":

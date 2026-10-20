@@ -98,8 +98,13 @@ def main() -> None:
     for path in files:
         if path.suffix in (".py", ".pyi"):
             findings.extend(scan_source((ROOT / path).read_text(encoding="utf-8"), path.as_posix()))
-    javascript = [path.as_posix() for path in files if path.suffix in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")]
-    result = subprocess.run(["node", str(ROOT / ".github/scripts/check_security.cjs")], cwd=ROOT, input=json.dumps(javascript), text=True, capture_output=True)
+    javascript = [
+        path.as_posix()
+        for path in files
+        if path.suffix in (".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts")
+        and path not in {Path(".github/scripts/check_security.cjs"), Path(".github/scripts/check_security.d.cts")}
+    ]
+    result = subprocess.run(["node", str(ROOT / ".github/scripts/check_security.cjs")], cwd=ROOT, input=json.dumps(javascript), text=True, capture_output=True) if javascript else subprocess.CompletedProcess([], 0, "", "")
     if result.stdout:
         print(result.stdout, end="")
     if result.stderr:

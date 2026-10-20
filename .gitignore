@@ -23,7 +23,6 @@ dist/
 build/
 coverage/
 *.tsbuildinfo
-cdk.out/
 
 # OS が自動生成するメタデータと、実行時に出力されるログのため管理しない。
 .DS_Store

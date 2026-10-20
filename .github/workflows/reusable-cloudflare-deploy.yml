@@ -1,0 +1,63 @@
+name: Reusable Cloudflare deployment
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        description: Whether the validated CI/CD configuration permits this deployment.
+        required: true
+        type: boolean
+      project-path:
+        description: Relative path of the application that owns the Wrangler deployment command.
+        required: true
+        type: string
+      deploy-command:
+        description: Application-defined non-interactive Wrangler deployment command.
+        required: true
+        type: string
+      github-environment:
+        description: GitHub Environment used for approvals and environment secrets.
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        description: Cloudflare API token. A same-named Environment Secret takes precedence.
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        description: Cloudflare account ID. A same-named Environment Secret takes precedence.
+        required: false
+
+jobs:
+  deploy:
+    if: inputs.enabled
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: ${{ inputs.github-environment }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate deployment inputs
+        env:
+          PROJECT_PATH: ${{ inputs.project-path }}
+          DEPLOY_COMMAND: ${{ inputs.deploy-command }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          [[ -n "$PROJECT_PATH" && "$PROJECT_PATH" != /* && "$PROJECT_PATH" != *".."* ]]
+          [[ -d "$PROJECT_PATH" && -n "$DEPLOY_COMMAND" ]]
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+      - name: Deploy application with Wrangler
+        working-directory: ${{ inputs.project-path }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: ${{ inputs.deploy-command }}
+  skipped:
+    if: ${{ !inputs.enabled }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Publish skipped operation
+        run: echo 'Cloudflare deployment skipped because this deployment path is disabled.' >> "$GITHUB_STEP_SUMMARY"
