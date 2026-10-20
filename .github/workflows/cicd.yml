@@ -1,0 +1,125 @@
+name: Application CI/CD
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  push:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy when enabled by configuration."
+        required: true
+        type: choice
+        options: [development, staging, production]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  ci:
+    uses: ./.github/workflows/reusable-ci.yml
+
+  regression:
+    name: Regression tests
+    if: always()
+    needs: ci
+    uses: ./.github/workflows/regression.yml
+    with:
+      quality-result: ${{ needs.ci.result }}
+
+  preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) && needs.ci.outputs.cdk-enabled == 'true'
+    needs: ci
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read
+    uses: ./.github/workflows/reusable-aws-cdk.yml
+    with:
+      enabled: true
+      operation: diff
+      preview-branch: ${{ github.event.pull_request.head.ref }}
+      stack-environment: ${{ format('pr-{0}', github.event.pull_request.number) }}
+      region: ${{ needs.ci.outputs.cdk-region }}
+      github-environment: preview
+      source-ref: ${{ github.event.pull_request.head.sha }}
+      expected-pr-state: open
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+  preview-environment:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association) && needs.ci.outputs.preview-environment-enabled == 'true'
+    needs: [ci, preview]
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: read
+    uses: ./.github/workflows/reusable-aws-cdk.yml
+    with:
+      enabled: true
+      operation: deploy
+      preview-branch: ${{ github.event.pull_request.head.ref }}
+      stack-environment: ${{ format('pr-{0}', github.event.pull_request.number) }}
+      region: ${{ needs.ci.outputs.cdk-region }}
+      github-environment: preview
+      source-ref: ${{ github.event.pull_request.head.sha }}
+      expected-pr-state: open
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+  deploy-development:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.ci.outputs.development-enabled == 'true') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'development' && needs.ci.outputs.development-enabled == 'true')
+    needs: ci
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/reusable-aws-cdk.yml
+    with:
+      enabled: true
+      operation: deploy
+      stack-name: app-development
+      stack-environment: development
+      region: ${{ needs.ci.outputs.cdk-region }}
+      github-environment: development
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+  deploy-staging:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/stg' && needs.ci.outputs.staging-enabled == 'true') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'staging' && needs.ci.outputs.staging-enabled == 'true')
+    needs: ci
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/reusable-aws-cdk.yml
+    with:
+      enabled: true
+      operation: deploy
+      stack-name: app-staging
+      stack-environment: staging
+      region: ${{ needs.ci.outputs.cdk-region }}
+      github-environment: staging
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+
+  deploy-production:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/prod' && needs.ci.outputs.production-enabled == 'true') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production' && needs.ci.outputs.production-enabled == 'true')
+    needs: ci
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/reusable-aws-cdk.yml
+    with:
+      enabled: true
+      operation: deploy
+      stack-name: app-production
+      stack-environment: production
+      region: ${{ needs.ci.outputs.cdk-region }}
+      github-environment: production
+    secrets:
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}

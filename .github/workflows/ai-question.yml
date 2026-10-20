@@ -1,0 +1,104 @@
+name: Answer AI questions
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ai-question-${{ github.event.issue.number }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  answer:
+    if: >-
+      (github.event_name == 'issues' &&
+       github.event.label.name == 'ai-question') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request == null &&
+       contains(github.event.comment.body, '@cline') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+       github.event.comment.user.type != 'Bot' &&
+       github.event.comment.user.login != 'github-actions[bot]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out the source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install Cline CLI
+        run: npm install --global cline@3.0.70
+
+      - name: Retrieve the issue conversation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh api --paginate --slurp "repos/$GH_REPO/issues/$ISSUE_NUMBER/comments?per_page=100" > "$RUNNER_TEMP/ai-question-comments.json"
+
+      - name: Prepare the question
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          TRIGGER_COMMENT_ID: ${{ github.event.comment.id || '' }}
+        run: |
+          python .github/scripts/ai_question.py prepare
+          mkdir -p "$HOME/.cline/hooks"
+          cp .github/scripts/ai_question.py "$HOME/.cline/hooks/PreToolUse.py"
+          chmod +x "$HOME/.cline/hooks/PreToolUse.py"
+
+      - name: Inspect source and draft an answer
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLINE_MODEL: ${{ vars.CLINE_MODEL || 'gpt-5.4' }}
+          CLINE_LOG_ENABLED: '0'
+        run: |
+          if [[ -z "$OPENAI_API_KEY" ]]; then
+            echo '::error::Repository secret OPENAI_API_KEY is not configured.'
+            exit 1
+          fi
+
+          if ! timeout --signal=TERM 1250s cline --json --plan --auto-approve true \
+            --timeout 1200 --provider openai --model "$CLINE_MODEL" \
+            --cwd "$GITHUB_WORKSPACE" \
+            < "$RUNNER_TEMP/ai-question-prompt.txt" \
+            > "$RUNNER_TEMP/ai-question-events.ndjson" \
+            2> "$RUNNER_TEMP/ai-question-stderr.txt"; then
+            echo '::error::Cline failed; no answer was posted.'
+            exit 1
+          fi
+
+          if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+            echo '::error::Cline changed files in the checkout; the answer will not be posted.'
+            exit 1
+          fi
+
+          python .github/scripts/ai_question.py extract
+
+      - name: Post the answer to the issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/ai-question-answer.md"

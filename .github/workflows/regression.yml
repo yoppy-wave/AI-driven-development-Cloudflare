@@ -1,0 +1,27 @@
+name: Regression tests
+
+on:
+  workflow_call:
+    inputs:
+      quality-result:
+        description: Result of the four-gate CI workflow.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Preserve required regression check
+        env:
+          QUALITY_RESULT: ${{ inputs.quality-result }}
+        run: |
+          if [[ "$QUALITY_RESULT" != success ]]; then
+            echo "Quality gates did not all succeed: $QUALITY_RESULT" >&2
+            exit 1
+          fi

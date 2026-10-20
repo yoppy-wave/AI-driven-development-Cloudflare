@@ -1,0 +1,28 @@
+docs.python.org
+nodejs.org
+docs.github.com
+code.visualstudio.com
+docs.docker.com
+
+# Exact hosts for Git HTTPS, gh, npm and pip. Redirect/CDN hosts are explicit.
+github.com
+api.github.com
+codeload.github.com
+raw.githubusercontent.com
+objects.githubusercontent.com
+release-assets.githubusercontent.com
+registry.npmjs.org
+pypi.org
+files.pythonhosted.org
+www.python.org
+
+# VS Code distribution; publisher-specific gallery CDN hosts may need adding.
+update.code.visualstudio.com
+marketplace.visualstudio.com
+vscode.download.prss.microsoft.com
+
+# Add only the AI provider(s) used by your team, after checking denied logs.
+# api.cline.bot
+# api.anthropic.com
+# api.openai.com
+# openrouter.ai

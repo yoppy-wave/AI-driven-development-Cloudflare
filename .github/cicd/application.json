@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "application": {
+    "name": "app"
+  },
+  "ci": {
+    "enabled": true
+  },
+  "cdk": {
+    "enabled": false,
+    "region": "us-east-1",
+    "previewEnvironmentEnabled": false
+  },
+  "deployments": {
+    "development": false,
+    "staging": false,
+    "production": false
+  }
+}

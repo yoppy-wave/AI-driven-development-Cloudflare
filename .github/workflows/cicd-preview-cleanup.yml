@@ -1,0 +1,102 @@
+name: Clean up preview environment
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  cleanup-target:
+    runs-on: ubuntu-24.04
+    outputs:
+      enabled: ${{ steps.config.outputs.preview_environment_enabled }}
+      region: ${{ steps.config.outputs.cdk_region }}
+      management-ref: ${{ steps.management.outputs.commit }}
+      cleanup-allowed: ${{ steps.current-pr.outputs.allowed }}
+    steps:
+      - name: Check out protected default-branch cleanup helper
+        id: management
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Read trusted CI/CD configuration
+        id: config
+        run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
+      - name: Confirm pull request remains closed
+        id: current-pr
+        if: steps.config.outputs.preview_environment_enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          state="$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq .state)"
+          if [[ "$state" == closed ]]; then
+            echo 'allowed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'allowed=false' >> "$GITHUB_OUTPUT"
+          fi
+  cleanup:
+    if: needs.cleanup-target.outputs.enabled == 'true' && needs.cleanup-target.outputs.cleanup-allowed == 'true'
+    needs: cleanup-target
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
+    environment:
+      name: preview
+    steps:
+      - name: Check out trusted default-branch management revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.cleanup-target.outputs.management-ref }}
+          persist-credentials: false
+      - name: Set up Node.js for shared stack naming
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Resolve preview stack from branch
+        env:
+          PREVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: python .github/scripts/preview_cleanup.py stack-name --branch "$PREVIEW_BRANCH"
+      - name: Confirm pull request remains closed before AWS authentication
+        id: current-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          state="$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq .state)"
+          if [[ "$state" == closed ]]; then
+            echo 'allowed=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'allowed=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Configure AWS credentials with OIDC
+        if: steps.current-pr.outputs.allowed == 'true'
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ needs.cleanup-target.outputs.region }}
+      - name: Validate and delete preview stack, or wait for existing deletion
+        if: steps.current-pr.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          PREVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REGION: ${{ needs.cleanup-target.outputs.region }}
+        run: |
+          python .github/scripts/preview_cleanup.py cleanup \
+            --branch "$PREVIEW_BRANCH" --pull-request "$PR_NUMBER" \
+            --region "$REGION" --repository "${{ github.repository }}"

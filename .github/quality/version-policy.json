@@ -1,0 +1,19 @@
+{
+  "grace_hours": 72,
+  "runtimes": {
+    "python": {
+      "series": "3.12",
+      "source": "https://www.python.org/api/v2/downloads/release/?is_published=true"
+    },
+    "node": {
+      "series": "24",
+      "source": "https://api.github.com/repos/nodejs/node/releases?per_page=100"
+    }
+  },
+  "fixed": {
+    "python": [
+      {"manifest": "requirements-dev.txt", "lock": "requirements-dev.lock"}
+    ],
+    "node_lock": "package-lock.json"
+  }
+}

@@ -1,9 +1,10 @@
-# Local configuration and credentials
+# ローカル環境ごとの設定や認証情報を含むため、リポジトリでは管理しない。
 .env
 .env.*
+# 共有用の設定テンプレートは管理対象に残す。
 !.env.example
 
-# Python
+# Python の仮想環境、実行時キャッシュ、テスト・静的解析で生成されるファイルのため管理しない。
 .venv/
 __pycache__/
 *.py[cod]
@@ -15,15 +16,19 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Node.js and build output
+# 依存パッケージおよびビルド・テストで再生成できる成果物のため管理しない。
 node_modules/
 .next/
 dist/
 build/
 coverage/
 *.tsbuildinfo
+cdk.out/
 
-# OS and logs
+# OS が自動生成するメタデータと、実行時に出力されるログのため管理しない。
 .DS_Store
 Thumbs.db
 *.log
+*.log.[0-9]*
+# Defensive exclusions if local proxy state/logs are copied into the workspace.
+.devcontainer/squid/.local/

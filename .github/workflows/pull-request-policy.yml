@@ -1,0 +1,29 @@
+name: Pull request policy
+
+on:
+  pull_request_target:
+    branches: [stg, prod]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      BASE_REF: ${{ github.base_ref }}
+      HEAD_REF: ${{ github.head_ref }}
+      BASE_REPOSITORY: ${{ github.repository }}
+      HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+      ALLOWED_STG_HEAD_PATTERNS: feature/*,fix/*
+    steps:
+      - name: Check out trusted base commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Validate pull request branch policy
+        run: python .github/scripts/pr_policy.py

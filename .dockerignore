@@ -12,4 +12,6 @@
 **/.env.*
 !**/.env.example
 **/*.log
+**/*.log.[0-9]*
+.devcontainer/squid/.local
 **/.DS_Store

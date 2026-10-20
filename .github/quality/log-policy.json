@@ -1,0 +1,5 @@
+{
+  "sensitive_words": ["password", "passwd", "secret", "token", "apikey", "authorization", "cookie", "credentials", "credential", "privatekey", "accesskey"],
+  "safe_names": ["token_count", "tokenCount", "has_token", "hasToken"],
+  "redacted_values": ["[REDACTED]", "***", "<redacted>"]
+}

@@ -1,0 +1,109 @@
+name: Implement AI coding issues
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ai-coding-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  implement:
+    if: github.event.label.name == 'ai-coding'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out the default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+
+      - name: Install Cline CLI
+        run: npm install --global cline@3.0.70
+
+      - name: Prepare the implementation request
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          python .github/scripts/ai_coding.py prepare
+          cp .github/scripts/ai_coding.py "$RUNNER_TEMP/ai-coding-helper.py"
+          cp .github/scripts/ai_question.py "$RUNNER_TEMP/ai_question.py"
+
+      - name: Implement and test with Cline
+        id: coding
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLINE_MODEL: ${{ vars.CLINE_MODEL || 'gpt-5.4' }}
+          CLINE_LOG_ENABLED: '0'
+        run: |
+          if [[ -z "$OPENAI_API_KEY" ]]; then
+            echo '::error::Repository secret OPENAI_API_KEY is not configured.'
+            exit 1
+          fi
+
+          base_sha="$(git rev-parse HEAD)"
+          if ! timeout --signal=TERM 2750s cline --json --auto-approve true \
+            --timeout 2700 --provider openai --model "$CLINE_MODEL" \
+            --cwd "$GITHUB_WORKSPACE" \
+            < "$RUNNER_TEMP/ai-coding-prompt.txt" \
+            > "$RUNNER_TEMP/ai-coding-events.ndjson" \
+            2> "$RUNNER_TEMP/ai-coding-stderr.txt"; then
+            echo '::error::Cline failed; no pull request was created.'
+            exit 1
+          fi
+
+          if [[ "$(git rev-parse HEAD)" != "$base_sha" ]]; then
+            echo '::error::Cline created a commit; this workflow expects uncommitted changes.'
+            exit 1
+          fi
+
+          git diff --check
+          python "$RUNNER_TEMP/ai-coding-helper.py" extract
+
+          if [[ -n "$(git status --porcelain --untracked-files=all)" ]]; then
+            echo 'has_changes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'has_changes=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update a draft pull request
+        id: pr
+        if: steps.coding.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v8.1.1
+        with:
+          token: ${{ secrets.AI_CODING_PR_TOKEN || secrets.GITHUB_TOKEN }}
+          base: ${{ github.event.repository.default_branch }}
+          branch: ai-coding/issue-${{ github.event.issue.number }}
+          commit-message: 'Clineでissue #${{ github.event.issue.number }}を実装'
+          title: 'AI実装: issue #${{ github.event.issue.number }}'
+          body-path: ${{ runner.temp }}/ai-coding-pr-body.md
+          draft: true
+
+      - name: Report when no pull request was created
+        if: steps.coding.outputs.has_changes == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body-file "$RUNNER_TEMP/ai-coding-no-change.md"
