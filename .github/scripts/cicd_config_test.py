@@ -68,3 +68,13 @@ class CicdConfigTests(unittest.TestCase):
         self.write(config)
         with self.assertRaisesRegex(ValueError, "lowercase"):
             cicd_config.load(self.config_path)
+
+    def test_preview_cannot_be_enabled_without_a_prepared_worker_project(self) -> None:
+        config = self.valid()
+        config["cloudflare"].update({
+            "enabled": True, "projectPath": "worker", "deployCommand": "npx wrangler deploy",
+            "previewEnvironmentEnabled": True,
+        })
+        self.write(config, with_project=True)
+        with self.assertRaisesRegex(ValueError, "package.json"):
+            cicd_config.load(self.config_path)

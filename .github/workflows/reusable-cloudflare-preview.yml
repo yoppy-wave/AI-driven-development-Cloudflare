@@ -1,0 +1,75 @@
+name: Reusable Cloudflare preview
+
+on:
+  workflow_call:
+    inputs:
+      enabled:
+        required: true
+        type: boolean
+      operation:
+        description: deploy or delete
+        required: true
+        type: string
+      project-path:
+        required: true
+        type: string
+      source-ref:
+        description: PR head SHA for deploy; trusted management SHA for delete.
+        required: true
+        type: string
+      preview-branch:
+        required: true
+        type: string
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  preview:
+    if: inputs.enabled
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: preview
+    env:
+      CI: "true"
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source-ref }}
+          persist-credentials: false
+      - name: Validate preview inputs
+        env:
+          OPERATION: ${{ inputs.operation }}
+          PROJECT_PATH: ${{ inputs.project-path }}
+          PREVIEW_BRANCH: ${{ inputs.preview-branch }}
+        run: python .github/scripts/cloudflare_preview.py validate
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install locked application dependencies
+        working-directory: ${{ inputs.project-path }}
+        run: npm ci
+      - name: Build preview application
+        if: inputs.operation == 'deploy'
+        working-directory: ${{ inputs.project-path }}
+        run: npm run build --if-present
+      - name: Check current PR and run preview operation
+        env:
+          OPERATION: ${{ inputs.operation }}
+          PROJECT_PATH: ${{ inputs.project-path }}
+          PREVIEW_BRANCH: ${{ inputs.preview-branch }}
+          SOURCE_REF: ${{ inputs.source-ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python .github/scripts/cloudflare_preview.py run

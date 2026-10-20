@@ -1,0 +1,50 @@
+name: Clean up Cloudflare preview
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Match the creation workflow so cleanup cannot race an in-flight deployment.
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  configuration:
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.config.outputs.preview_environment_enabled }}
+      project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+      management-ref: ${{ steps.management.outputs.sha }}
+    steps:
+      - name: Check out trusted default branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Pin trusted management revision
+        id: management
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Read trusted deployment configuration
+        id: config
+        run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
+  cleanup:
+    needs: configuration
+    if: needs.configuration.outputs.enabled == 'true'
+    uses: ./.github/workflows/reusable-cloudflare-preview.yml
+    with:
+      enabled: true
+      operation: delete
+      project-path: ${{ needs.configuration.outputs.project-path }}
+      source-ref: ${{ needs.configuration.outputs.management-ref }}
+      preview-branch: ${{ github.event.pull_request.head.ref }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

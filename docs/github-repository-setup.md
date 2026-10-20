@@ -122,7 +122,29 @@ Cloudflareデプロイを有効化する前に、プロジェクト管理者は�
 6. `cloudflare.enabled`、`previewEnvironmentEnabled`、`deployments`の必要な項目だけを明示的に`true`にする。
 7. 承認済みの範囲で、対象環境を限定してCI/CDの挙動を確認する。
 
-再利用workflowは`workflow_call.secrets`で必要なSecret名を明示し、callerも`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`だけを明示的に渡します。jobに割り当てたGitHub Environmentの同名Secretが優先されます。PR previewはfork外かつOWNER、MEMBER、COLLABORATORのPRだけが対象です。PR close時の削除は、採用するCloudflareサービスのpreview方式が確定してから追加します。
+再利用workflowは`workflow_call.secrets`で必要なSecret名を明示し、callerも`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`だけを明示的に渡します。jobに割り当てたGitHub Environmentの同名Secretが優先されます。PR previewはfork外かつOWNER、MEMBER、COLLABORATORのPRだけが対象です。
+
+### ブランチ単位のWorkers Preview
+
+PR previewはCloudflare WorkersのPreviewsを使用します。通常環境向けの`deployCommand`は実行せず、専用workflowが次の処理を行います。
+
+| イベント | 処理 |
+| --- | --- |
+| PR作成・再オープン・追加push | 品質ゲート成功後、`npm ci`、任意の`build`スクリプト、`npx --no-install wrangler preview --name <環境名>`で作成・更新 |
+| PRマージ・マージせずクローズ | `npx --no-install wrangler preview delete --name <環境名> --skip-confirmation`で削除 |
+
+命名は`.github/scripts/cloudflare_preview.py`の共通関数を使用します。ブランチ名の英数字以外を1文字ずつ`-`へ置換し、小文字化、先頭・末尾の`-`の除去、30文字への切り詰めを行い、`app-`を付けます。例えば`feature/login`は`app-feature-login`です。ハッシュ・PR番号は付けず、記号の違いによる名前の衝突は区別しません。
+
+有効化前に、対象の`cloudflare.projectPath`へ以下を準備してください。
+
+- Workers Preview対応のWranglerを完全なバージョン番号で固定した`package.json`と、対応する`package-lock.json`。
+- Worker名とPreview設定を含む`wrangler.jsonc`、`wrangler.json`または`wrangler.toml`。Worker名は各ブランチと既定ブランチで同じものを使用します。
+- ビルドが必要なら`package.json`の`build`スクリプト。削除時にはビルドを実行しません。
+- 上記の設定とworkflowを既定ブランチにも配置し、同じアプリパスを使用します。削除側は既定ブランチの信頼済み設定・依存関係だけを使います。Previewが残る間はWorker名・アプリパス・命名関数を変更しないでください。
+
+作成と削除は同じPR単位の実行キューを使います。操作直前にGitHub APIで状態を再確認し、閉じたPRや古いコミットの作成・更新、再オープン済みPRの削除をスキップします。削除workflowは`pull_request_target: closed`を使いますが、PRコードはcheckoutしません。Cloudflare操作の失敗は成功扱いにせず、Actions上で失敗として報告します。
+
+この削除はWorkers Previewが対象です。共有のD1・R2・KVなどを一緒に削除する処理は含めません。Preview用のバインディングで接続先を明示してください。Cloudflareの[Preview CI例](https://developers.cloudflare.com/workers/previews/examples/)と[リソース分離](https://developers.cloudflare.com/workers/previews/resources/)も参照してください。
 
 ## 5. 開発者の追加・削除
 

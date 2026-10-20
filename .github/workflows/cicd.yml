@@ -39,12 +39,13 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    uses: ./.github/workflows/reusable-cloudflare-deploy.yml
+    uses: ./.github/workflows/reusable-cloudflare-preview.yml
     with:
       enabled: true
+      operation: deploy
       project-path: ${{ needs.ci.outputs.cloudflare-project-path }}
-      deploy-command: ${{ needs.ci.outputs.cloudflare-deploy-command }}
-      github-environment: preview
+      source-ref: ${{ github.event.pull_request.head.sha }}
+      preview-branch: ${{ github.event.pull_request.head.ref }}
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

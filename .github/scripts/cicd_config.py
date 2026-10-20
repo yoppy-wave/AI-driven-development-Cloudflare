@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from cloudflare_preview import project_directory
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / ".github" / "cicd" / "application.json"
@@ -74,6 +75,8 @@ def validate(config: dict[str, object], root: Path = ROOT) -> dict[str, object]:
             fail("cloudflare.projectPath must exist when cloudflare.enabled is true")
         if not deploy_command.strip():
             fail("cloudflare.deployCommand must be non-empty when cloudflare.enabled is true")
+    if preview_enabled:
+        project_directory(root, project_path)
 
     deployments = required_object(config.get("deployments"), "deployments")
     for environment in ("development", "staging", "production"):
