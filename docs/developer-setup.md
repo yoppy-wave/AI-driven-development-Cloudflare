@@ -49,7 +49,7 @@ WSL側のファイルシステムにcloneします。ファイル操作性能の
 mkdir -p ~/projects
 cd ~/projects
 git clone <リポジトリのURL>
-cd AI-driven-development
+cd AI-driven-development-aws
 code .
 ```
 
