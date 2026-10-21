@@ -1,6 +1,6 @@
 # 開発者セットアップ
 
-この文書は、新しく参加する開発者が自分の端末とアカウントを準備し、Dev Container内で開発を始めるまでの手順です。GitHub・AWSのプロジェクト初期設定は[GitHubリポジトリの初回設定](github-repository-setup.md)、日々の作業は[開発ガイド](development-guide.md)を参照してください。
+この文書は、新しく参加する開発者が自分の端末とアカウントを準備し、Dev Container内で開発を始めるまでの手順です。GitHub・Cloudflareのプロジェクト初期設定は[GitHubリポジトリの初回設定](github-repository-setup.md)、日々の作業は[開発ガイド](development-guide.md)を参照してください。
 
 認証情報、APIキー、パスワードをソースコード、Git管理対象ファイル、READMEへ保存しないでください。
 
@@ -49,7 +49,7 @@ WSL側のファイルシステムにcloneします。ファイル操作性能の
 mkdir -p ~/projects
 cd ~/projects
 git clone <リポジトリのURL>
-cd AI-driven-development-aws
+cd AI-driven-development-Cloudflare
 code .
 ```
 
@@ -113,15 +113,12 @@ APIキーはClineの設定画面など、個人の安全な認証領域へ入力
 アプリケーション依存関係はDev Containerでは自動導入しません。コンテナ内で次を実行します。
 
 ```bash
-npm ci
 python -m pip install -r requirements-dev.lock
-npm run typecheck
-npm test
 python -m pytest
-npm run synth
+python .github/scripts/run_lint.py
 ```
 
-現在のリポジトリには、AWS CDKのTypeScript構成、Lambdaサンプル、Python・TypeScriptのテストがあります。AWS操作は初期状態で無効です。`cdk deploy`、`cdk destroy`、`cdk bootstrap`、AWS認証は、対象アカウント、リージョン、Stack、変更・削除対象、復旧方法を確認した明示承認なしに実行しません。
+現在のリポジトリには、PythonによるCI/CD基盤テストと、Cloudflare向けGitHub Actionsテンプレートがあります。Cloudflareデプロイは初期状態で無効です。アプリ構成、対象環境、変更・復旧方法を確認した明示的な運用判断なしに、Cloudflare API Tokenを使うデプロイを実行しません。
 
 `Dockerfile`だけを`docker build`しても、Node.js Feature、VS Code拡張機能、`.venv`作成は適用されません。開発環境の構築にはDev Containersを使用してください。`devcontainer.json`やDockerfileを変更した場合は **Dev Containers: Rebuild Container** を実行します。
 
@@ -252,6 +249,6 @@ SQUID_INTEGRATION=1 python -m pytest .devcontainer/squid/integration_test.py -q
 - [ ] コンテナ内でPython 3.12系、Node.js 24系、Git、GitHub CLIを確認できた
 - [ ] Gitの表示名・メールアドレスを設定し、`gh auth status`でGitHub認証を確認した
 - [ ] Clineなど利用するAIツールの個人認証を完了し、認証情報をリポジトリへ保存していない
-- [ ] `npm ci`と`python -m pip install -r requirements-dev.lock`が成功した
-- [ ] `npm run typecheck`、`npm test`、`python -m pytest`、`npm run synth`が成功した
+- [ ] `python -m pip install -r requirements-dev.lock`が成功した
+- [ ] `python -m pytest`、`python .github/scripts/run_lint.py`が成功した
 - [ ] 必要なプロキシ、VPN、証明書、通信許可を確認した

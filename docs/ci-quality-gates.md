@@ -9,17 +9,17 @@ Application CI/CD
   ci（再利用Workflow）
     Test ────────┐
     Lint ────────┤
-    Dependency ──┼─→ ci / ci ─→ 既存のCDK diff → deploy
+    Dependency ──┼─→ ci / ci ─→ Cloudflare preview / deploy
     Security ────┘       └────→ Regression tests / regression
 ```
 
-`ci / ci`は`always()`で集約処理を実行し、4ゲートのfailure・cancelled・skipped・欠落をすべて失敗にします。各ゲートで実際に解決されたランタイムも検証し、成功後だけ既存のCDK有効化・リージョン・デプロイ有効化outputsを公開します。AWS jobの`needs: ci`は維持します。
+`ci / ci`は`always()`で集約処理を実行し、4ゲートのfailure・cancelled・skipped・欠落をすべて失敗にします。各ゲートで実際に解決されたランタイムも検証し、成功後だけCloudflareの有効化・プロジェクトパス・デプロイコマンド・環境有効化outputsを公開します。Cloudflare jobの`needs: ci`は維持します。
 
 `regression.yml`は再利用Workflowとして集約結果を検証する軽量な互換チェックです。caller名`Regression tests`とjob ID `regression`により、Rulesetsが要求する`Regression tests / regression`を維持します。`ci / ci`も変更しません。stg/prodのRulesets・PRポリシーは変更しません。
 
 ## Test
 
-既存のプロジェクト検出、Pythonプロジェクトの`*_test.py`必須条件、Nodeプロジェクトのtest script必須条件を維持します。pytest、Jest、型チェック、build、CDK synthを実行します。Lintは専用ゲートへ移し、typecheck/buildの実体コマンドが同一なら1回だけ実行します。
+既存のプロジェクト検出、Pythonプロジェクトの`*_test.py`必須条件、Nodeプロジェクトのtest script必須条件を維持します。検出したプロジェクトごとにpytest、Nodeのtest、型チェック、buildを実行します。アプリ未作成のテンプレートでは、CI基盤自身のPythonテストだけが対象です。Lintは専用ゲートへ移し、typecheck/buildの実体コマンドが同一なら1回だけ実行します。
 
 ## Lint
 
@@ -68,10 +68,9 @@ Python標準`ast`と既存のTypeScript Compiler APIを使用します。Git管�
 python .github/scripts/run_regression.py
 python .github/scripts/run_lint.py
 python .github/scripts/check_dependencies.py
-npm ci --ignore-scripts
 python .github/scripts/check_security.py
 ```
 
-ローカルで同じnode_modulesを共有する場合は、インストールを伴う各コマンドを同時実行しません。CIでは各ジョブが独立したrunnerで動きます。意図的なpytest失敗、Ruff/ESLint違反、機密ログ、猶予境界値、固定版不一致、skipped/cancelledゲートをテストで確認します。
+アプリにNodeプロジェクトを追加した後は、同じnode_modulesを共有するインストールコマンドを同時実行しません。CIでは各ジョブが独立したrunnerで動きます。意図的なpytest失敗、Ruff/ESLint違反、機密ログ、猶予境界値、固定版不一致、skipped/cancelledゲートをテストで確認します。
 
-AWS CDK・Preview Environment・各環境デプロイは引き続き初期無効です。品質チェックは実AWSへのdiff/deploy/deleteを行いません。Stack命名・cleanup・GitHub Actions編集用VS Code拡張・コンテナ通信制御は変更しません。
+Cloudflare・Preview Environment・各環境デプロイは引き続き初期無効です。品質チェックはCloudflare認証やデプロイコマンドを実行しません。アプリ追加後に`.github/cicd/application.json`を明示的に有効化し、必要なGitHub Environment Secretを設定します。

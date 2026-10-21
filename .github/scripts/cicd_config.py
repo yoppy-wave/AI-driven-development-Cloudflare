@@ -6,6 +6,7 @@ import json
 import re
 from pathlib import Path
 
+from cloudflare_preview import project_directory
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / ".github" / "cicd" / "application.json"
@@ -52,28 +53,36 @@ def validate(config: dict[str, object], root: Path = ROOT) -> dict[str, object]:
 
     application = required_object(config.get("application"), "application")
     name = required_string(application, "name", "application")
-    if name != "app":
-        fail("application.name must be app so CDK and cleanup use the same stack namespace")
+    if not NAME_PATTERN.fullmatch(name):
+        fail("application.name must contain lowercase letters, digits, and hyphens, and start with a letter")
 
     ci = required_object(config.get("ci"), "ci")
     required_bool(ci, "enabled", "ci")
 
-    cdk = required_object(config.get("cdk"), "cdk")
-    enabled = required_bool(cdk, "enabled", "cdk")
-    region = required_string(cdk, "region", "cdk")
-    if not re.fullmatch(r"[a-z]{2}-[a-z]+-[0-9]+", region):
-        fail("cdk.region must be an AWS region identifier")
-    preview_enabled = required_bool(cdk, "previewEnvironmentEnabled", "cdk")
+    cloudflare = required_object(config.get("cloudflare"), "cloudflare")
+    enabled = required_bool(cloudflare, "enabled", "cloudflare")
+    project_path = cloudflare.get("projectPath")
+    deploy_command = cloudflare.get("deployCommand")
+    if not isinstance(project_path, str) or not isinstance(deploy_command, str):
+        fail("cloudflare.projectPath and cloudflare.deployCommand must be strings")
+    preview_enabled = required_bool(cloudflare, "previewEnvironmentEnabled", "cloudflare")
     if preview_enabled and not enabled:
-        fail("cdk.previewEnvironmentEnabled requires cdk.enabled to be true")
-    if enabled and not (root / "cdk.json").is_file():
-        fail("cdk.json must exist when cdk.enabled is true")
+        fail("cloudflare.previewEnvironmentEnabled requires cloudflare.enabled to be true")
+    if enabled:
+        if not project_path or Path(project_path).is_absolute() or ".." in Path(project_path).parts:
+            fail("cloudflare.projectPath must be a non-empty relative path inside the repository when cloudflare.enabled is true")
+        if not (root / project_path).is_dir():
+            fail("cloudflare.projectPath must exist when cloudflare.enabled is true")
+        if not deploy_command.strip():
+            fail("cloudflare.deployCommand must be non-empty when cloudflare.enabled is true")
+    if preview_enabled:
+        project_directory(root, project_path)
 
     deployments = required_object(config.get("deployments"), "deployments")
     for environment in ("development", "staging", "production"):
         required_bool(deployments, environment, "deployments")
     if any(deployments.values()) and not enabled:
-        fail("enabled deployments require cdk.enabled to be true")
+        fail("enabled deployments require cloudflare.enabled to be true")
 
     return config
 
@@ -81,14 +90,15 @@ def validate(config: dict[str, object], root: Path = ROOT) -> dict[str, object]:
 def values(config: dict[str, object]) -> dict[str, str]:
     application = required_object(config["application"], "application")
     ci = required_object(config["ci"], "ci")
-    cdk = required_object(config["cdk"], "cdk")
+    cloudflare = required_object(config["cloudflare"], "cloudflare")
     deployments = required_object(config["deployments"], "deployments")
     result = {
         "application_name": str(application["name"]),
         "ci_enabled": str(ci["enabled"]).lower(),
-        "cdk_enabled": str(cdk["enabled"]).lower(),
-        "cdk_region": str(cdk["region"]),
-        "preview_environment_enabled": str(cdk["previewEnvironmentEnabled"]).lower(),
+        "cloudflare_enabled": str(cloudflare["enabled"]).lower(),
+        "cloudflare_project_path": str(cloudflare["projectPath"]),
+        "cloudflare_deploy_command": str(cloudflare["deployCommand"]),
+        "preview_environment_enabled": str(cloudflare["previewEnvironmentEnabled"]).lower(),
         "development_enabled": str(deployments["development"]).lower(),
         "staging_enabled": str(deployments["staging"]).lower(),
         "production_enabled": str(deployments["production"]).lower(),

@@ -1,4 +1,4 @@
-name: Clean up preview environment
+name: Clean up Cloudflare preview
 
 on:
   pull_request_target:
@@ -8,95 +8,43 @@ permissions:
   contents: read
   pull-requests: read
 
+# Match the creation workflow so cleanup cannot race an in-flight deployment.
 concurrency:
   group: preview-${{ github.event.pull_request.number }}
   cancel-in-progress: false
   queue: max
 
 jobs:
-  cleanup-target:
+  configuration:
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       enabled: ${{ steps.config.outputs.preview_environment_enabled }}
-      region: ${{ steps.config.outputs.cdk_region }}
-      management-ref: ${{ steps.management.outputs.commit }}
-      cleanup-allowed: ${{ steps.current-pr.outputs.allowed }}
+      project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+      management-ref: ${{ steps.management.outputs.sha }}
     steps:
-      - name: Check out protected default-branch cleanup helper
-        id: management
+      - name: Check out trusted default branch
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
-      - name: Read trusted CI/CD configuration
+      - name: Pin trusted management revision
+        id: management
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Read trusted deployment configuration
         id: config
         run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
-      - name: Confirm pull request remains closed
-        id: current-pr
-        if: steps.config.outputs.preview_environment_enabled == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          state="$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq .state)"
-          if [[ "$state" == closed ]]; then
-            echo 'allowed=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'allowed=false' >> "$GITHUB_OUTPUT"
-          fi
   cleanup:
-    if: needs.cleanup-target.outputs.enabled == 'true' && needs.cleanup-target.outputs.cleanup-allowed == 'true'
-    needs: cleanup-target
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      pull-requests: read
-      id-token: write
-    environment:
-      name: preview
-    steps:
-      - name: Check out trusted default-branch management revision
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.cleanup-target.outputs.management-ref }}
-          persist-credentials: false
-      - name: Set up Node.js for shared stack naming
-        uses: actions/setup-node@v7
-        with:
-          node-version: "24"
-          package-manager-cache: false
-      - name: Resolve preview stack from branch
-        env:
-          PREVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
-        run: python .github/scripts/preview_cleanup.py stack-name --branch "$PREVIEW_BRANCH"
-      - name: Confirm pull request remains closed before AWS authentication
-        id: current-pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          state="$(gh api "repos/${{ github.repository }}/pulls/$PR_NUMBER" --jq .state)"
-          if [[ "$state" == closed ]]; then
-            echo 'allowed=true' >> "$GITHUB_OUTPUT"
-          else
-            echo 'allowed=false' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Configure AWS credentials with OIDC
-        if: steps.current-pr.outputs.allowed == 'true'
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ needs.cleanup-target.outputs.region }}
-      - name: Validate and delete preview stack, or wait for existing deletion
-        if: steps.current-pr.outputs.allowed == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          PREVIEW_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REGION: ${{ needs.cleanup-target.outputs.region }}
-        run: |
-          python .github/scripts/preview_cleanup.py cleanup \
-            --branch "$PREVIEW_BRANCH" --pull-request "$PR_NUMBER" \
-            --region "$REGION" --repository "${{ github.repository }}"
+    needs: configuration
+    if: needs.configuration.outputs.enabled == 'true'
+    uses: ./.github/workflows/reusable-cloudflare-preview.yml
+    with:
+      enabled: true
+      operation: delete
+      project-path: ${{ needs.configuration.outputs.project-path }}
+      source-ref: ${{ needs.configuration.outputs.management-ref }}
+      preview-branch: ${{ github.event.pull_request.head.ref }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

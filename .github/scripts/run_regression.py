@@ -11,7 +11,7 @@ from pathlib import Path
 
 IGNORED_DIRS = {
     ".git", ".github", ".devcontainer", ".venv", "venv", "node_modules",
-    "dist", "build", "obj", "coverage", ".next", "cdk.out", "__pycache__",
+    "dist", "build", "obj", "coverage", ".next", "__pycache__",
 }
 
 

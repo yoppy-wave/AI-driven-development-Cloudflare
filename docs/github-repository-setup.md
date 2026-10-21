@@ -2,7 +2,7 @@
 
 この文書は、テンプレートから作成したプロジェクトを利用可能にするために、**プロジェクト管理者**が一度行う設定をまとめたものです。開発者個人の端末準備は[開発者セットアップ](developer-setup.md)、日々の実装・PR・AI Issueの利用は[開発ガイド](development-guide.md)を参照してください。
 
-リポジトリ内の設定ファイルをコミットしただけでは、GitHubやAWSの管理画面で行う保護・権限・認証の設定は有効になりません。ここでは両者を明確に区別します。
+リポジトリ内の設定ファイルをコミットしただけでは、GitHubやCloudflareの管理画面で行う保護・権限・認証の設定は有効になりません。ここでは両者を明確に区別します。
 
 ## 1. プロジェクトとアクセスの準備
 
@@ -17,7 +17,7 @@
 
 - **個人開発**: リポジトリ所有者だけで運用できます。管理権限を他者へ安易に付与しません。
 - **チーム開発**: Organizationで少なくとも開発者、Product Owner（PO）、リリース責任者を分けます。Teamを使う場合は、CODEOWNERSで参照できるvisible Teamにします。
-- リポジトリ管理、Rulesetのbypass、Environmentの承認、AWS IAM管理は必要最小限の担当者だけに付与します。通常の開発者には、PR作成・レビューに必要な権限を付与します。
+- リポジトリ管理、Rulesetのbypass、Environmentの承認、Cloudflare API Token管理は必要最小限の担当者だけに付与します。通常の開発者には、PR作成・レビューに必要な権限を付与します。
 - 外部協力者には、必要な期間と範囲に限った権限を設定します。fork PRはpreview環境の対象外です。
 
 ## 2. ブランチとPR保護
@@ -87,7 +87,7 @@ Rulesetの必須チェックには、次のcheck contextを指定します。
 
 GitHubの **Settings → Actions → General** で、リポジトリ方針に沿ってActionsを許可します。`ai-coding.yml`がドラフトPRを作成するには、**Workflow permissions**でGitHub Actionsによるプルリクエスト作成を許可します。
 
-workflowは必要な権限をYAMLで明示していますが、リポジトリ設定でより強い制限を掛ける場合は、CI、AI Issueワークフロー、CDK workflowが必要とする権限と両立することをテストしてください。
+workflowは必要な権限をYAMLで明示していますが、リポジトリ設定でより強い制限を掛ける場合は、CI、AI Issueワークフロー、Cloudflare deployment workflowが必要とする権限と両立することをテストしてください。
 
 ### AI Issueワークフローの有効化
 
@@ -101,29 +101,50 @@ workflowは必要な権限をYAMLで明示していますが、リポジトリ�
 
 - `AI_CODING_PR_TOKEN`を使う場合は、`contents: write`と`pull-requests: write`だけを必要範囲として付与します。未設定時は`GITHUB_TOKEN`を使います。
 - GitHub上で`ai-question`と`ai-coding`ラベルを作成します。
-- OpenAI APIキーは利用上限を設定し、信頼できる担当者だけが`ai-coding`ラベルを付与できる運用にします。APIキー、PAT、AWS認証情報をリポジトリやStack Outputへ保存しません。
+- OpenAI APIキーは利用上限を設定し、信頼できる担当者だけが`ai-coding`ラベルを付与できる運用にします。APIキー、PAT、Cloudflare認証情報をリポジトリへ保存しません。
 - AI Issueワークフローの利用方法・制約は[開発ガイド](development-guide.md#issueからaiを利用する)を参照してください。
 
-## 4. GitHub EnvironmentsとAWS OIDC
+## 4. GitHub EnvironmentsとCloudflare
 
 ### 現在の状態
 
-`.github/cicd/application.json`がCI/CDの有効化契約です。現在は`ci.enabled`だけが`true`で、AWS CDK、PR preview、development / staging / productionへのデプロイはすべて`false`です。この状態ではAWS認証、`cdk deploy`、`cdk destroy`はworkflowから実行されません。
+`.github/cicd/application.json`がCI/CDの有効化契約です。現在は`ci.enabled`だけが`true`で、Cloudflare、PR preview、development / staging / productionへのデプロイはすべて`false`です。この状態ではCloudflare認証やデプロイコマンドはworkflowから実行されません。
 
-AWS CDKのStack構成、previewの安全策、cleanupの設計は[AWS CDKアーキテクチャ](aws-cdk-architecture.md)を参照してください。
+### Cloudflare・GitHub管理画面での準備
 
-### AWS・GitHub管理画面での準備
+Cloudflareデプロイを有効化する前に、プロジェクト管理者は次を準備します。
 
-AWSデプロイを有効化する前に、プロジェクト管理者は次を準備します。
-
-1. 対象環境のAWSアカウント、リージョン、Stack名、変更・削除対象、データのバックアップ・復旧方法を決める。
-2. GitHub Actions OIDC用のIAM identity providerと、環境ごとに最小権限のIAM Roleを作成する。アクセスキーは使わず、Role ARNをソースやOutputへ書かない。
-3. GitHubの **Settings → Environments** で`preview`、`development`、`staging`、`production`を作成する。対象のRole ARNを、各Environmentの`AWS_ROLE_TO_ASSUME` **Environment Secret**として設定する。
+1. Workers、Pagesなど採用するCloudflareサービス、デプロイ対象ディレクトリ、Wranglerコマンド、変更・復旧方法を決める。
+2. Cloudflareで対象サービスだけを操作できる最小権限のAPI Tokenを作成する。TokenやAccount IDをソース、workflow、ログへ書かない。
+3. GitHubの **Settings → Environments** で`preview`、`development`、`staging`、`production`を作成する。各Environmentに`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`のEnvironment Secretを設定する。
 4. `preview`、`staging`、`production`にはrequired reviewersを設定する。productionには承認者と必要なdeployment branch policyも設定する。developmentも組織方針に応じて承認・ブランチ制限を設定する。
-5. `application.json`で、必要な`cdk.enabled`、`previewEnvironmentEnabled`、`deployments`だけを明示的に`true`にする。
-6. 承認済みの範囲で、対象Stackと環境を限定してCI/CDの挙動を確認する。
+5. アプリ側にWrangler設定を追加し、`application.json`の`cloudflare.projectPath`と`cloudflare.deployCommand`を設定する。
+6. `cloudflare.enabled`、`previewEnvironmentEnabled`、`deployments`の必要な項目だけを明示的に`true`にする。
+7. 承認済みの範囲で、対象環境を限定してCI/CDの挙動を確認する。
 
-再利用workflowは`workflow_call.secrets`で必要なSecret名を明示し、callerも`AWS_ROLE_TO_ASSUME`だけを明示的に渡します。jobに割り当てたGitHub Environmentの同名Secretが優先されます。
+再利用workflowは`workflow_call.secrets`で必要なSecret名を明示し、callerも`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`だけを明示的に渡します。jobに割り当てたGitHub Environmentの同名Secretが優先されます。PR previewはfork外かつOWNER、MEMBER、COLLABORATORのPRだけが対象です。
+
+### ブランチ単位のWorkers Preview
+
+PR previewはCloudflare WorkersのPreviewsを使用します。通常環境向けの`deployCommand`は実行せず、専用workflowが次の処理を行います。
+
+| イベント | 処理 |
+| --- | --- |
+| PR作成・再オープン・追加push | 品質ゲート成功後、`npm ci`、任意の`build`スクリプト、`npx --no-install wrangler preview --name <環境名>`で作成・更新 |
+| PRマージ・マージせずクローズ | `npx --no-install wrangler preview delete --name <環境名> --skip-confirmation`で削除 |
+
+命名は`.github/scripts/cloudflare_preview.py`の共通関数を使用します。ブランチ名の英数字以外を1文字ずつ`-`へ置換し、小文字化、先頭・末尾の`-`の除去、30文字への切り詰めを行い、`app-`を付けます。例えば`feature/login`は`app-feature-login`です。ハッシュ・PR番号は付けず、記号の違いによる名前の衝突は区別しません。
+
+有効化前に、対象の`cloudflare.projectPath`へ以下を準備してください。
+
+- Workers Preview対応のWranglerを完全なバージョン番号で固定した`package.json`と、対応する`package-lock.json`。
+- Worker名とPreview設定を含む`wrangler.jsonc`、`wrangler.json`または`wrangler.toml`。Worker名は各ブランチと既定ブランチで同じものを使用します。
+- ビルドが必要なら`package.json`の`build`スクリプト。削除時にはビルドを実行しません。
+- 上記の設定とworkflowを既定ブランチにも配置し、同じアプリパスを使用します。削除側は既定ブランチの信頼済み設定・依存関係だけを使います。Previewが残る間はWorker名・アプリパス・命名関数を変更しないでください。
+
+作成と削除は同じPR単位の実行キューを使います。操作直前にGitHub APIで状態を再確認し、閉じたPRや古いコミットの作成・更新、再オープン済みPRの削除をスキップします。削除workflowは`pull_request_target: closed`を使いますが、PRコードはcheckoutしません。Cloudflare操作の失敗は成功扱いにせず、Actions上で失敗として報告します。
+
+この削除はWorkers Previewが対象です。共有のD1・R2・KVなどを一緒に削除する処理は含めません。Preview用のバインディングで接続先を明示してください。Cloudflareの[Preview CI例](https://developers.cloudflare.com/workers/previews/examples/)と[リソース分離](https://developers.cloudflare.com/workers/previews/resources/)も参照してください。
 
 ## 5. 開発者の追加・削除
 
@@ -131,13 +152,13 @@ AWSデプロイを有効化する前に、プロジェクト管理者は次を�
 
 - Organizationメンバーまたは外部協力者として招待し、必要なTeamと最小権限を割り当てる。
 - チーム開発では、開発ガイド、PRレビュー責任、対象ブランチ、AI Issueラベルの利用権限を共有する。
-- AWSコンソールや長期アクセスキーを開発者へ配る必要はありません。必要なクラウド操作はEnvironmentで保護したGitHub Actions OIDC経由に限定します。
+- Cloudflare API Tokenを開発者へ配る必要はありません。必要なクラウド操作はEnvironmentで保護したGitHub Actions経由に限定します。
 
 ### 削除・異動時
 
 - Organization、Team、リポジトリ協力者、CODEOWNERS、Ruleset bypass list、Environment reviewersから対象者を外す。
 - 個人に発行したPAT、APIキー、外部サービスのアカウント・トークンを失効またはローテーションする。
-- AWS IAM Roleの信頼ポリシー、IAM Identity Centerなど、対象者に紐付くアクセス経路を見直す。
+- Cloudflareのメンバー権限、API Token、対象アカウント・ゾーンへのアクセス経路を見直す。
 - 所有中のIssue、PR、レビュー待ち、リリース責任を別担当へ引き継ぐ。
 
 ## 設定完了チェックリスト
@@ -149,7 +170,7 @@ AWSデプロイを有効化する前に、プロジェクト管理者は次を�
 - [ ] `main`または採用する既定ブランチを確認した
 - [ ] GitHub Actionsの実行方針とWorkflow permissionsを確認した
 - [ ] AI Issueワークフローを使う場合、必要なラベルとSecrets / variablesを設定した
-- [ ] APIキー、PAT、AWS認証情報をリポジトリへ保存していない
+- [ ] APIキー、PAT、Cloudflare認証情報をリポジトリへ保存していない
 
 ### チーム開発へ移行する場合
 
@@ -162,11 +183,11 @@ AWSデプロイを有効化する前に、プロジェクト管理者は次を�
 - [ ] `stg`と`prod`への直接pushが拒否されることを確認した
 - [ ] `feature/* → stg`、`stg → prod`のPR運用をチームで共有した
 
-### AWS CDKを有効化する場合
+### Cloudflareデプロイを有効化する場合
 
-- [ ] 対象AWSアカウント、リージョン、Stack、変更・削除対象、復旧方法を確認した
-- [ ] GitHub Actions OIDCと環境別・最小権限のIAM Roleを設定した
-- [ ] `preview`、`development`、`staging`、`production` Environmentと`AWS_ROLE_TO_ASSUME`を設定した
+- [ ] 採用するCloudflareサービス、デプロイ対象、変更・復旧方法を確認した
+- [ ] 環境別・最小権限のCloudflare API Tokenを設定した
+- [ ] `preview`、`development`、`staging`、`production` Environmentと`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`を設定した
 - [ ] `preview`、`staging`、`production`のrequired reviewersを設定した
 - [ ] `.github/cicd/application.json`で必要な機能だけを`true`にした
 - [ ] 有効化対象のworkflowを、承認済みの環境で確認した

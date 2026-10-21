@@ -6,9 +6,10 @@
   "ci": {
     "enabled": true
   },
-  "cdk": {
+  "cloudflare": {
     "enabled": false,
-    "region": "us-east-1",
+    "projectPath": "",
+    "deployCommand": "",
     "previewEnvironmentEnabled": false
   },
   "deployments": {

@@ -35,7 +35,7 @@ class QualityWorkflowTests(unittest.TestCase):
         self.assertIn("name: Regression tests", caller)
         self.assertIn("uses: ./.github/workflows/regression.yml", caller)
         self.assertIn("quality-result: ${{ needs.ci.result }}", caller)
-        for name in ("cdk-enabled", "cdk-region", "preview-environment-enabled", "development-enabled", "staging-enabled", "production-enabled"):
+        for name in ("cloudflare-enabled", "cloudflare-project-path", "cloudflare-deploy-command", "preview-environment-enabled", "development-enabled", "staging-enabled", "production-enabled"):
             self.assertIn(f"value: ${{{{ jobs.ci.outputs.{name} }}}}", reusable)
             self.assertIn(f"{name}: ${{{{ steps.config.outputs.{name.replace('-', '_')} }}}}", reusable)
         for environment in ("stg", "prod"):
@@ -49,19 +49,19 @@ class QualityWorkflowTests(unittest.TestCase):
             result = subprocess.run(["bash", "-e", "-c", script], env={**os.environ, "QUALITY_RESULT": state}, capture_output=True)
             self.assertEqual(result.returncode, expected)
 
-    def test_single_entrypoint_and_all_aws_jobs_depend_on_ci(self) -> None:
+    def test_single_entrypoint_and_all_cloudflare_jobs_depend_on_ci(self) -> None:
         caller = workflow("cicd.yml")
         self.assertIn("  push:\n  workflow_dispatch:", caller)
         self.assertIn("  pull_request:", caller)
         self.assertNotIn("  push:", workflow("regression.yml"))
         self.assertNotIn("run_regression.py", workflow("regression.yml"))
         self.assertEqual(workflow("reusable-ci.yml").count("run_regression.py"), 1)
-        for job in ("preview", "preview-environment", "deploy-development", "deploy-staging", "deploy-production"):
+        for job in ("preview", "deploy-development", "deploy-staging", "deploy-production"):
             section = re.split(r"\n  [\w-]+:\n", caller.split(f"\n  {job}:\n", 1)[1])[0]
             self.assertIn("needs: ", section)
-            self.assertRegex(section, r"needs: (ci|\[ci, preview\])")
+            self.assertRegex(section, r"needs: ci")
             self.assertNotIn("always()", section)
         config = json.loads((ROOT / ".github/cicd/application.json").read_text())
-        self.assertFalse(config["cdk"]["enabled"])
-        self.assertFalse(config["cdk"]["previewEnvironmentEnabled"])
+        self.assertFalse(config["cloudflare"]["enabled"])
+        self.assertFalse(config["cloudflare"]["previewEnvironmentEnabled"])
         self.assertFalse(any(config["deployments"].values()))

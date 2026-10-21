@@ -3,12 +3,15 @@ name: Reusable CI
 on:
   workflow_call:
     outputs:
-      cdk-enabled:
-        description: Validated cdk-enabled after all quality gates succeed.
-        value: ${{ jobs.ci.outputs.cdk-enabled }}
-      cdk-region:
-        description: Validated cdk-region after all quality gates succeed.
-        value: ${{ jobs.ci.outputs.cdk-region }}
+      cloudflare-enabled:
+        description: Validated cloudflare-enabled after all quality gates succeed.
+        value: ${{ jobs.ci.outputs.cloudflare-enabled }}
+      cloudflare-project-path:
+        description: Validated Cloudflare application path after all quality gates succeed.
+        value: ${{ jobs.ci.outputs.cloudflare-project-path }}
+      cloudflare-deploy-command:
+        description: Validated Cloudflare deployment command after all quality gates succeed.
+        value: ${{ jobs.ci.outputs.cloudflare-deploy-command }}
       preview-environment-enabled:
         description: Validated preview-environment-enabled after all quality gates succeed.
         value: ${{ jobs.ci.outputs.preview-environment-enabled }}
@@ -53,7 +56,6 @@ jobs:
         with:
           node-version: ${{ steps.policy.outputs.node }}
           check-latest: true
-          cache: npm
       - name: Run test gate
         id: check
         run: |
@@ -86,7 +88,6 @@ jobs:
         with:
           node-version: ${{ steps.policy.outputs.node }}
           check-latest: true
-          cache: npm
       - name: Run lint gate
         id: check
         run: |
@@ -122,7 +123,6 @@ jobs:
         with:
           node-version: ${{ steps.policy.outputs.node }}
           check-latest: true
-          cache: npm
       - name: Run dependency gate
         id: check
         run: |
@@ -155,11 +155,9 @@ jobs:
         with:
           node-version: ${{ steps.policy.outputs.node }}
           check-latest: true
-          cache: npm
       - name: Run security gate
         id: check
         run: |
-          npm ci --ignore-scripts
           python .github/scripts/check_security.py
 
   ci:
@@ -168,8 +166,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
-      cdk-enabled: ${{ steps.config.outputs.cdk_enabled }}
-      cdk-region: ${{ steps.config.outputs.cdk_region }}
+      cloudflare-enabled: ${{ steps.config.outputs.cloudflare_enabled }}
+      cloudflare-project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+      cloudflare-deploy-command: ${{ steps.config.outputs.cloudflare_deploy_command }}
       preview-environment-enabled: ${{ steps.config.outputs.preview_environment_enabled }}
       development-enabled: ${{ steps.config.outputs.development_enabled }}
       staging-enabled: ${{ steps.config.outputs.staging_enabled }}

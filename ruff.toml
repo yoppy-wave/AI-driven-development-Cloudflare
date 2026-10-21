@@ -1,5 +1,5 @@
 target-version = "py312"
-extend-exclude = [".venv", "node_modules", "cdk.out"]
+extend-exclude = [".venv", "node_modules"]
 
 [lint]
 # Correctness checks without imposing a repository-wide formatting rewrite.
