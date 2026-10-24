@@ -22,10 +22,12 @@ jobs:
       enabled: ${{ steps.config.outputs.preview_environment_enabled }}
       project-path: ${{ steps.config.outputs.cloudflare_project_path }}
     steps:
-      - uses: actions/checkout@v7
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - id: config
+      - name: Preview設定を検証
+        id: config
         run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
   preview:
     needs: configuration
@@ -45,4 +47,5 @@ jobs:
     if: always() && (needs.configuration.result == 'skipped' || needs.configuration.outputs.enabled != 'true')
     runs-on: ubuntu-24.04
     steps:
-      - run: echo 'Cloudflare Preview skipped because it is disabled or the PR is not trusted.' >> "$GITHUB_STEP_SUMMARY"
+      - name: スキップ理由を表示
+        run: echo 'Cloudflare Preview skipped because it is disabled or the PR is not trusted.' >> "$GITHUB_STEP_SUMMARY"

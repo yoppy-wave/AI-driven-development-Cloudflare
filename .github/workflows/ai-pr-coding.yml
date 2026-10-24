@@ -39,22 +39,26 @@ jobs:
           Path(os.environ['RUNNER_TEMP'], 'pr-title.txt').write_text(pull['title'], encoding='utf-8')
           Path(os.environ['RUNNER_TEMP'], 'pr-body.txt').write_text(pull.get('body') or '', encoding='utf-8')
           PY
-      - uses: actions/create-github-app-token@v2
+      - name: GitHub Appトークンを発行
+        uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.CLINE_GITHUB_APP_ID }}
           private-key: ${{ secrets.CLINE_GITHUB_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-      - uses: actions/checkout@v7
+      - name: PRブランチをチェックアウト
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.pr.outputs.ref }}
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: true
-      - uses: actions/setup-python@v7
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v7
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           package-manager-cache: false

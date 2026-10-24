@@ -26,6 +26,8 @@ class QualityWorkflowTests(unittest.TestCase):
             self.assertIn("types: [opened, reopened, synchronize]", content)
             self.assertNotIn("  push:", content)
             self.assertIn(command, content)
+            for step in ("リポジトリをチェックアウト", "Pythonをセットアップ", "Node.jsをセットアップ"):
+                self.assertIn(f"name: {step}", content)
 
     def test_rulesets_require_every_independent_quality_check(self) -> None:
         expected = {

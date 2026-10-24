@@ -17,10 +17,12 @@ jobs:
       project-path: ${{ steps.config.outputs.cloudflare_project_path }}
       worker-name: ${{ steps.config.outputs.preview_worker_name }}
     steps:
-      - uses: actions/checkout@v7
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - id: config
+      - name: 監査設定を検証
+        id: config
         run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
   audit:
     needs: configuration
@@ -35,7 +37,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v7
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Validate audit inputs
@@ -49,4 +52,5 @@ jobs:
     if: needs.configuration.outputs.enabled != 'true'
     runs-on: ubuntu-24.04
     steps:
-      - run: echo 'Cloudflare Preview orphan audit skipped because it is disabled.' >> "$GITHUB_STEP_SUMMARY"
+      - name: スキップ理由を表示
+        run: echo 'Cloudflare Preview orphan audit skipped because it is disabled.' >> "$GITHUB_STEP_SUMMARY"

@@ -16,10 +16,12 @@ jobs:
       project-path: ${{ steps.config.outputs.cloudflare_project_path }}
       deploy-command: ${{ steps.config.outputs.cloudflare_deploy_command }}
     steps:
-      - uses: actions/checkout@v7
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - id: config
+      - name: Stgデプロイ設定を検証
+        id: config
         run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
   deploy:
     needs: configuration

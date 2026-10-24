@@ -15,10 +15,12 @@ jobs:
       enabled: ${{ steps.config.outputs.analysis_archive_enabled }}
       project-path: ${{ steps.config.outputs.cloudflare_project_path }}
     steps:
-      - uses: actions/checkout@v7
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - id: config
+      - name: アーカイブ設定を検証
+        id: config
         run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
   publish:
     needs: configuration
@@ -32,10 +34,12 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
-      - uses: actions/checkout@v7
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v7
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           package-manager-cache: false
@@ -53,4 +57,5 @@ jobs:
     if: needs.configuration.outputs.enabled != 'true'
     runs-on: ubuntu-24.04
     steps:
-      - run: echo 'Analysis archive skipped because it is disabled.' >> "$GITHUB_STEP_SUMMARY"
+      - name: スキップ理由を表示
+        run: echo 'Analysis archive skipped because it is disabled.' >> "$GITHUB_STEP_SUMMARY"
