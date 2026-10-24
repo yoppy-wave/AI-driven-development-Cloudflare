@@ -1,0 +1,111 @@
+name: Implement PR comments with Cline
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-pr-coding-${{ github.event.issue.number }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  implement:
+    if: github.event.issue.pull_request != null && contains(github.event.comment.body, '@cline') && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && github.event.comment.user.type != 'Bot' && github.event.comment.user.login != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Read trusted PR metadata
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh api "repos/$GH_REPO/pulls/$PR_NUMBER" > "$RUNNER_TEMP/pr.json"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+          pull = json.loads(Path(os.environ['RUNNER_TEMP'], 'pr.json').read_text())
+          if pull['head']['repo']['full_name'] != pull['base']['repo']['full_name']:
+              raise SystemExit('Fork pull requests are not supported.')
+          print('ref=' + pull['head']['ref'])
+          print('sha=' + pull['head']['sha'])
+          Path(os.environ['RUNNER_TEMP'], 'pr-title.txt').write_text(pull['title'], encoding='utf-8')
+          Path(os.environ['RUNNER_TEMP'], 'pr-body.txt').write_text(pull.get('body') or '', encoding='utf-8')
+          PY
+      - name: GitHub Appトークンを発行
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.CLINE_GITHUB_APP_ID }}
+          private-key: ${{ secrets.CLINE_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: PRブランチをチェックアウト
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.pr.outputs.ref }}
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: true
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install Cline CLI
+        run: npm install --global cline@3.0.70
+      - name: Prepare PR implementation request
+        env:
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          export PR_TITLE="$(cat "$RUNNER_TEMP/pr-title.txt")"
+          export PR_BODY="$(cat "$RUNNER_TEMP/pr-body.txt")"
+          python .github/scripts/ai_pr_coding.py prepare
+      - name: Implement with Cline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CLINE_MODEL: ${{ vars.CLINE_MODEL || 'gpt-5.4' }}
+          CLINE_LOG_ENABLED: '0'
+        run: |
+          [[ -n "$OPENAI_API_KEY" ]]
+          timeout --signal=TERM 2750s cline --json --auto-approve true --timeout 2700 --provider openai --model "$CLINE_MODEL" --cwd "$GITHUB_WORKSPACE" < "$RUNNER_TEMP/ai-pr-coding-prompt.txt" > "$RUNNER_TEMP/ai-pr-coding-events.ndjson" 2> "$RUNNER_TEMP/ai-pr-coding-stderr.txt"
+          python .github/scripts/ai_pr_coding.py extract
+      - name: Commit and push changes
+        id: push
+        run: |
+          if [[ -z "$(git status --porcelain --untracked-files=all)" ]]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --check
+          git config user.name 'cline[bot]'
+          git config user.email 'cline[bot]@users.noreply.github.com'
+          git add --all
+          git commit -F "$RUNNER_TEMP/ai-pr-coding-commit-message.txt"
+          git push origin HEAD:${{ steps.pr.outputs.ref }}
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+      - name: Report the result
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          CHANGED: ${{ steps.push.outputs.changed }}
+        run: |
+          if [[ "$CHANGED" == true ]]; then
+            { echo 'ClineがPRコメントの指示を反映してコミットを追加しました。'; echo; cat "$RUNNER_TEMP/ai-pr-coding-result.md"; } > "$RUNNER_TEMP/comment.md"
+          else
+            { echo 'ClineはPRコメントの指示を確認しましたが、コミットする変更はありませんでした。'; echo; cat "$RUNNER_TEMP/ai-pr-coding-result.md"; } > "$RUNNER_TEMP/comment.md"
+          fi
+          gh pr comment "$PR_NUMBER" --body-file "$RUNNER_TEMP/comment.md"

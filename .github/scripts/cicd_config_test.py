@@ -16,10 +16,10 @@ class CicdConfigTests(unittest.TestCase):
         self.config_path = self.root / ".github" / "cicd" / "application.json"
 
     def valid(self) -> dict[str, object]:
-        return {"version": 1, "application": {"name": "app"}, "ci": {"enabled": True}, "cloudflare": {"enabled": False, "projectPath": "", "deployCommand": "", "previewEnvironmentEnabled": False}, "deployments": {"development": False, "staging": False, "production": False}}
+        return {"version": 1, "application": {"name": "app"}, "ci": {"enabled": True}, "cloudflare": {"enabled": False, "projectPath": "", "deployCommand": "", "previewEnvironmentEnabled": False, "previewOrphanAuditEnabled": False, "previewWorkerName": "", "analysisArchiveEnabled": False}, "deployments": {"development": False, "staging": False, "production": False}}
 
     def write(self, config: dict[str, object], with_project: bool = False) -> None:
-        self.config_path.parent.mkdir(parents=True)
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_path.write_text(json.dumps(config), encoding="utf-8")
         if with_project:
             (self.root / "worker").mkdir()
@@ -33,6 +33,25 @@ class CicdConfigTests(unittest.TestCase):
         config["cloudflare"]["previewEnvironmentEnabled"] = True
         self.write(config)
         with self.assertRaisesRegex(ValueError, "requires cloudflare.enabled"):
+            cicd_config.load(self.config_path)
+
+    def test_preview_audit_requires_enabled_previews_and_worker_name(self) -> None:
+        config = self.valid()
+        config["cloudflare"]["previewOrphanAuditEnabled"] = True
+        self.write(config)
+        with self.assertRaisesRegex(ValueError, "previewEnvironmentEnabled"):
+            cicd_config.load(self.config_path)
+
+        config["cloudflare"].update({"enabled": True, "previewEnvironmentEnabled": True, "projectPath": "worker", "deployCommand": "npx wrangler deploy"})
+        self.write(config, with_project=True)
+        with self.assertRaisesRegex(ValueError, "previewWorkerName"):
+            cicd_config.load(self.config_path)
+
+    def test_analysis_archive_requires_cloudflare(self) -> None:
+        config = self.valid()
+        config["cloudflare"]["analysisArchiveEnabled"] = True
+        self.write(config)
+        with self.assertRaisesRegex(ValueError, "analysisArchiveEnabled requires"):
             cicd_config.load(self.config_path)
 
     def test_enabled_deployment_requires_cloudflare(self) -> None:

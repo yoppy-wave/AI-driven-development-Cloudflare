@@ -1,4 +1,4 @@
-name: Clean up Cloudflare preview
+name: Clean up Cloudflare Preview
 
 on:
   pull_request_target:

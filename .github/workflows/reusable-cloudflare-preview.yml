@@ -40,7 +40,8 @@ jobs:
       CI: "true"
       WRANGLER_SEND_METRICS: "false"
     steps:
-      - uses: actions/checkout@v7
+      - name: Preview対象をチェックアウト
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.source-ref }}
           persist-credentials: false
@@ -50,7 +51,8 @@ jobs:
           PROJECT_PATH: ${{ inputs.project-path }}
           PREVIEW_BRANCH: ${{ inputs.preview-branch }}
         run: python .github/scripts/cloudflare_preview.py validate
-      - uses: actions/setup-node@v7
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
         with:
           node-version: "24"
           package-manager-cache: false

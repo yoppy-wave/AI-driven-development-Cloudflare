@@ -1,0 +1,61 @@
+name: Publish analysis archive
+
+on:
+  push:
+    branches: [prod]
+
+permissions:
+  contents: read
+
+jobs:
+  configuration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.config.outputs.analysis_archive_enabled }}
+      project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: アーカイブ設定を検証
+        id: config
+        run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
+  publish:
+    needs: configuration
+    if: needs.configuration.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production
+    env:
+      R2_ANALYSIS_ARCHIVE_BUCKET: ${{ vars.R2_ANALYSIS_ARCHIVE_BUCKET }}
+      PROJECT_PATH: ${{ needs.configuration.outputs.project-path }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install locked application dependencies
+        working-directory: ${{ needs.configuration.outputs.project-path }}
+        run: npm ci
+      - name: Validate R2 archive inputs
+        run: |
+          [[ -n "$R2_ANALYSIS_ARCHIVE_BUCKET" ]]
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+      - name: Publish repository archive to R2
+        run: python .github/scripts/publish_analysis_archive.py
+  skipped:
+    needs: configuration
+    if: needs.configuration.outputs.enabled != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: スキップ理由を表示
+        run: echo 'Analysis archive skipped because it is disabled.' >> "$GITHUB_STEP_SUMMARY"

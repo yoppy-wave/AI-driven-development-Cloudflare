@@ -32,7 +32,7 @@ class PreviewTests(unittest.TestCase):
         self.assertEqual(preview.preview_name("feature/login"), preview.preview_name("feature_login"))
 
     @patch.dict(os.environ, {"CLOUDFLARE_API_TOKEN": "test", "CLOUDFLARE_ACCOUNT_ID": "test"})
-    @patch.object(preview.subprocess, "run")
+    @patch.object(preview.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "{}", ""))
     @patch.object(preview.subprocess, "check_output")
     def test_create_update_and_close_delete_the_same_preview(self, get_pr, run):
         get_pr.side_effect = [
@@ -43,7 +43,7 @@ class PreviewTests(unittest.TestCase):
             self.assertTrue(preview.run_preview(Path("."), operation, "feature/login", "owner/repo", "12", sha))
         calls = [call.args[0] for call in run.call_args_list]
         self.assertEqual(calls[0], calls[1])
-        self.assertEqual(calls[0], ["npx", "--no-install", "wrangler", "preview", "--name", "app-feature-login"])
+        self.assertEqual(calls[0], ["npx", "--no-install", "wrangler", "preview", "--name", "app-feature-login", "--json"])
         self.assertEqual(calls[2], ["npx", "--no-install", "wrangler", "preview", "delete", "--name", "app-feature-login", "--skip-confirmation"])
 
     @patch.object(preview.subprocess, "run")

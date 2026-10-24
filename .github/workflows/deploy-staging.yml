@@ -1,0 +1,36 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [stg]
+
+permissions:
+  contents: read
+
+jobs:
+  configuration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.config.outputs.staging_enabled }}
+      project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+      deploy-command: ${{ steps.config.outputs.cloudflare_deploy_command }}
+    steps:
+      - name: リポジトリをチェックアウト
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Stgデプロイ設定を検証
+        id: config
+        run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
+  deploy:
+    needs: configuration
+    uses: ./.github/workflows/reusable-cloudflare-deploy.yml
+    with:
+      enabled: ${{ needs.configuration.outputs.enabled == 'true' }}
+      project-path: ${{ needs.configuration.outputs.project-path }}
+      deploy-command: ${{ needs.configuration.outputs.deploy-command }}
+      github-environment: staging
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
