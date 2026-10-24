@@ -34,7 +34,16 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           {
-            "context": "Regression tests / regression"
+            "context": "Lint / lint"
+          },
+          {
+            "context": "Dependency check / dependency-check"
+          },
+          {
+            "context": "Test / test"
+          },
+          {
+            "context": "Security check / security-check"
           },
           {
             "context": "Pull request policy / validate"

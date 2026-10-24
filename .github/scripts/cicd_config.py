@@ -66,8 +66,19 @@ def validate(config: dict[str, object], root: Path = ROOT) -> dict[str, object]:
     if not isinstance(project_path, str) or not isinstance(deploy_command, str):
         fail("cloudflare.projectPath and cloudflare.deployCommand must be strings")
     preview_enabled = required_bool(cloudflare, "previewEnvironmentEnabled", "cloudflare")
+    preview_audit_enabled = required_bool(cloudflare, "previewOrphanAuditEnabled", "cloudflare")
+    preview_worker_name = cloudflare.get("previewWorkerName")
+    if not isinstance(preview_worker_name, str):
+        fail("cloudflare.previewWorkerName must be a string")
+    archive_enabled = required_bool(cloudflare, "analysisArchiveEnabled", "cloudflare")
     if preview_enabled and not enabled:
         fail("cloudflare.previewEnvironmentEnabled requires cloudflare.enabled to be true")
+    if preview_audit_enabled and not preview_enabled:
+        fail("cloudflare.previewOrphanAuditEnabled requires cloudflare.previewEnvironmentEnabled to be true")
+    if preview_audit_enabled and not preview_worker_name:
+        fail("cloudflare.previewWorkerName must be non-empty when cloudflare.previewOrphanAuditEnabled is true")
+    if archive_enabled and not enabled:
+        fail("cloudflare.analysisArchiveEnabled requires cloudflare.enabled to be true")
     if enabled:
         if not project_path or Path(project_path).is_absolute() or ".." in Path(project_path).parts:
             fail("cloudflare.projectPath must be a non-empty relative path inside the repository when cloudflare.enabled is true")
@@ -99,6 +110,9 @@ def values(config: dict[str, object]) -> dict[str, str]:
         "cloudflare_project_path": str(cloudflare["projectPath"]),
         "cloudflare_deploy_command": str(cloudflare["deployCommand"]),
         "preview_environment_enabled": str(cloudflare["previewEnvironmentEnabled"]).lower(),
+        "preview_orphan_audit_enabled": str(cloudflare["previewOrphanAuditEnabled"]).lower(),
+        "preview_worker_name": str(cloudflare["previewWorkerName"]),
+        "analysis_archive_enabled": str(cloudflare["analysisArchiveEnabled"]).lower(),
         "development_enabled": str(deployments["development"]).lower(),
         "staging_enabled": str(deployments["staging"]).lower(),
         "production_enabled": str(deployments["production"]).lower(),

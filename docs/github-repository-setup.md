@@ -18,7 +18,7 @@
 - **個人開発**: リポジトリ所有者だけで運用できます。管理権限を他者へ安易に付与しません。
 - **チーム開発**: Organizationで少なくとも開発者、Product Owner（PO）、リリース責任者を分けます。Teamを使う場合は、CODEOWNERSで参照できるvisible Teamにします。
 - リポジトリ管理、Rulesetのbypass、Environmentの承認、Cloudflare API Token管理は必要最小限の担当者だけに付与します。通常の開発者には、PR作成・レビューに必要な権限を付与します。
-- 外部協力者には、必要な期間と範囲に限った権限を設定します。fork PRはpreview環境の対象外です。
+- このテンプレートはprivate repositoryで、forkを許可しない運用を想定します。外部協力者にも必要な期間だけリポジトリ権限を付与し、PRは同一リポジトリのブランチから作成します。
 
 ## 2. ブランチとPR保護
 
@@ -76,10 +76,13 @@ Rulesetの必須チェックには、次のcheck contextを指定します。
 
 | check context | 定義元 |
 | --- | --- |
-| `Regression tests / regression` | `.github/workflows/regression.yml` |
+| `Lint / lint` | `.github/workflows/lint.yml` |
+| `Dependency check / dependency-check` | `.github/workflows/dependency-check.yml` |
+| `Test / test` | `.github/workflows/test.yml` |
+| `Security check / security-check` | `.github/workflows/security-check.yml` |
 | `Pull request policy / validate` | `.github/workflows/pull-request-policy.yml` |
 
-品質ゲートは全ブランチへのpushとPRで実行されます。Test・Lint・Dependency・Securityを並列実行し、`ci / ci`で集約します。Rulesets用の`Regression tests / regression`は同じ集約結果を検証する互換チェックとして維持します。詳しくは[CI品質ゲート](ci-quality-gates.md)を参照してください。PRポリシーは、`prod`宛てを同一リポジトリの`stg`からだけ、`stg`宛てを`feature/*`または`fix/*`からだけ許可します。
+品質ゲートはPRの作成・再オープン・更新時に個別workflowとして実行されます。Rulesetでは5件すべてを必須にします。詳しくは[CI品質ゲート](ci-quality-gates.md)を参照してください。PRポリシーは、`prod`宛てを同一リポジトリの`stg`からだけ、`stg`宛てを`feature/*`または`fix/*`からだけ許可します。
 
 ## 3. GitHub Actions、AI Issueワークフロー、Secrets
 
@@ -89,17 +92,21 @@ GitHubの **Settings → Actions → General** で、リポジトリ方針に沿
 
 workflowは必要な権限をYAMLで明示していますが、リポジトリ設定でより強い制限を掛ける場合は、CI、AI Issueワークフロー、Cloudflare deployment workflowが必要とする権限と両立することをテストしてください。
 
-### AI Issueワークフローの有効化
+### AI workflowの有効化
 
-`ai-question.yml`と`ai-coding.yml`は、既定ブランチに存在すると利用できます。`ai-coding.yml`は対応するラベルをIssueへ付与したときに起動します。`ai-question.yml`は`ai-question`ラベルに加え、OWNER、MEMBER、COLLABORATORがIssueコメントで`@cline`を付けたときにも起動します。利用する場合はGitHub管理画面で次を設定します。
+`ai-question.yml`と`ai-coding.yml`は、既定ブランチに存在すると利用できます。`ai-coding.yml`は対応するラベルをIssueへ付与したときに起動します。`ai-question.yml`は`ai-question`ラベルに加え、OWNER、MEMBER、COLLABORATORがIssueコメントで`@cline`を付けたときにも起動します。`ai-pr-coding.yml`は、同じ権限者がPRのConversationへ`@cline`を含む通常コメントを投稿したときに、そのPRブランチを修正します。
 
 | 種別 | 名前 | 用途 | 必須性 |
 | --- | --- | --- | --- |
 | Repository secret | `OPENAI_API_KEY` | Cline CLIのOpenAI API認証 | AI Issueワークフローを使う場合は必須 |
 | Repository variable | `CLINE_MODEL` | 使用するOpenAI APIモデルID。未設定時は`gpt-5.4` | 任意 |
 | Repository secret | `AI_CODING_PR_TOKEN` | AI作成PRの後続CIを自動実行したい場合のPAT | 任意 |
+| Repository variable | `CLINE_GITHUB_APP_ID` | PR修正用GitHub AppのApp ID | `ai-pr-coding.yml`を使う場合は必須 |
+| Repository secret | `CLINE_GITHUB_APP_PRIVATE_KEY` | PR修正用GitHub Appの秘密鍵 | `ai-pr-coding.yml`を使う場合は必須 |
 
 - `AI_CODING_PR_TOKEN`を使う場合は、`contents: write`と`pull-requests: write`だけを必要範囲として付与します。未設定時は`GITHUB_TOKEN`を使います。
+- PR修正用GitHub Appは現在のリポジトリにだけインストールし、`Contents: Read and write`と`Pull requests: Read and write`を付与します。workflowは短期installation tokenを取得してPRブランチへpushするため、そのpushで独立したPR品質workflowが再実行されます。
+- PR上の`@cline`は常に修正依頼です。対象はConversationの通常コメントだけで、Files changedの行コメントとPRレビューコメントは対象外です。Issue上の`@cline`は質問回答です。
 - GitHub上で`ai-question`と`ai-coding`ラベルを作成します。
 - OpenAI APIキーは利用上限を設定し、信頼できる担当者だけが`ai-coding`ラベルを付与できる運用にします。APIキー、PAT、Cloudflare認証情報をリポジトリへ保存しません。
 - AI Issueワークフローの利用方法・制約は[開発ガイド](development-guide.md#issueからaiを利用する)を参照してください。
@@ -108,7 +115,7 @@ workflowは必要な権限をYAMLで明示していますが、リポジトリ�
 
 ### 現在の状態
 
-`.github/cicd/application.json`がCI/CDの有効化契約です。現在は`ci.enabled`だけが`true`で、Cloudflare、PR preview、development / staging / productionへのデプロイはすべて`false`です。この状態ではCloudflare認証やデプロイコマンドはworkflowから実行されません。
+`.github/cicd/application.json`がCI/CDの有効化契約です。現在は`ci.enabled`だけが`true`で、Cloudflare、PR preview、Preview削除漏れ監査、R2解析アーカイブ、development / staging / productionへのデプロイはすべて`false`です。この状態ではCloudflare認証やデプロイコマンドはworkflowから実行されません。
 
 ### Cloudflare・GitHub管理画面での準備
 
@@ -116,10 +123,10 @@ Cloudflareデプロイを有効化する前に、プロジェクト管理者は�
 
 1. Workers、Pagesなど採用するCloudflareサービス、デプロイ対象ディレクトリ、Wranglerコマンド、変更・復旧方法を決める。
 2. Cloudflareで対象サービスだけを操作できる最小権限のAPI Tokenを作成する。TokenやAccount IDをソース、workflow、ログへ書かない。
-3. GitHubの **Settings → Environments** で`preview`、`development`、`staging`、`production`を作成する。各Environmentに`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`のEnvironment Secretを設定する。
+3. GitHubの **Settings → Environments** で`preview`、`development`、`staging`、`production`を作成する。各Environmentに`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`のEnvironment Secretを設定する。R2解析アーカイブを使う場合は`production`に`R2_ANALYSIS_ARCHIVE_BUCKET` Environment Variableを追加する。
 4. `preview`、`staging`、`production`にはrequired reviewersを設定する。productionには承認者と必要なdeployment branch policyも設定する。developmentも組織方針に応じて承認・ブランチ制限を設定する。
 5. アプリ側にWrangler設定を追加し、`application.json`の`cloudflare.projectPath`と`cloudflare.deployCommand`を設定する。
-6. `cloudflare.enabled`、`previewEnvironmentEnabled`、`deployments`の必要な項目だけを明示的に`true`にする。
+6. `cloudflare.enabled`、`previewEnvironmentEnabled`、`previewOrphanAuditEnabled`、`analysisArchiveEnabled`、`deployments`の必要な項目だけを明示的に`true`にする。Preview削除漏れ監査を有効にする場合は、同じ`cloudflare`設定で`previewWorkerName`も指定する。
 7. 承認済みの範囲で、対象環境を限定してCI/CDの挙動を確認する。
 
 再利用workflowは`workflow_call.secrets`で必要なSecret名を明示し、callerも`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`だけを明示的に渡します。jobに割り当てたGitHub Environmentの同名Secretが優先されます。PR previewはfork外かつOWNER、MEMBER、COLLABORATORのPRだけが対象です。
@@ -130,7 +137,7 @@ PR previewはCloudflare WorkersのPreviewsを使用します。通常環境向�
 
 | イベント | 処理 |
 | --- | --- |
-| PR作成・再オープン・追加push | 品質ゲート成功後、`npm ci`、任意の`build`スクリプト、`npx --no-install wrangler preview --name <環境名>`で作成・更新 |
+| PR作成・再オープン・追加push | 品質ゲートを待たず、`npm ci`、任意の`build`スクリプト、`npx --no-install wrangler preview --name <環境名>`で作成・更新 |
 | PRマージ・マージせずクローズ | `npx --no-install wrangler preview delete --name <環境名> --skip-confirmation`で削除 |
 
 命名は`.github/scripts/cloudflare_preview.py`の共通関数を使用します。ブランチ名の英数字以外を1文字ずつ`-`へ置換し、小文字化、先頭・末尾の`-`の除去、30文字への切り詰めを行い、`app-`を付けます。例えば`feature/login`は`app-feature-login`です。ハッシュ・PR番号は付けず、記号の違いによる名前の衝突は区別しません。
@@ -143,6 +150,14 @@ PR previewはCloudflare WorkersのPreviewsを使用します。通常環境向�
 - 上記の設定とworkflowを既定ブランチにも配置し、同じアプリパスを使用します。削除側は既定ブランチの信頼済み設定・依存関係だけを使います。Previewが残る間はWorker名・アプリパス・命名関数を変更しないでください。
 
 作成と削除は同じPR単位の実行キューを使います。操作直前にGitHub APIで状態を再確認し、閉じたPRや古いコミットの作成・更新、再オープン済みPRの削除をスキップします。削除workflowは`pull_request_target: closed`を使いますが、PRコードはcheckoutしません。Cloudflare操作の失敗は成功扱いにせず、Actions上で失敗として報告します。
+
+PreviewのURLはPRコメントへ投稿せず、Preview workflowのJob Summaryにだけ表示します。毎週月曜09:00 UTCには`preview-orphan-audit.yml`が起動します。`previewOrphanAuditEnabled`が`false`ならCloudflare認証なしで成功終了し、`true`ならOpen PRとclosed PR由来のPreview候補を突合します。削除漏れ候補を検出した場合はJob Summaryへ一覧を出してworkflowを失敗にします。自動削除やIssue作成はしません。
+
+### 本番デプロイと解析アーカイブ
+
+- `deploy-staging.yml`は`stg`へのpush、`deploy-production.yml`は`prod`へのpushだけで起動します。通常はRulesetでPRマージだけを許可します。
+- `publish-analysis-archive.yml`も`prod`へのpushで起動します。`analysisArchiveEnabled`が`true`の場合だけ、Git管理対象ファイルをZIP化し、production Environmentの`R2_ANALYSIS_ARCHIVE_BUCKET`へアップロードします。
+- 格納キーは`analysis-archives/<owner>/<repository>.zip`です。同じキーを上書きし、R2 Object Versioningは使わず最新1世代だけを保持します。アップロード失敗はworkflow失敗として扱います。
 
 この削除はWorkers Previewが対象です。共有のD1・R2・KVなどを一緒に削除する処理は含めません。Preview用のバインディングで接続先を明示してください。Cloudflareの[Preview CI例](https://developers.cloudflare.com/workers/previews/examples/)と[リソース分離](https://developers.cloudflare.com/workers/previews/resources/)も参照してください。
 

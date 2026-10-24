@@ -1,0 +1,52 @@
+name: Audit Cloudflare Preview orphans
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  configuration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.config.outputs.preview_orphan_audit_enabled }}
+      project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+      worker-name: ${{ steps.config.outputs.preview_worker_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: config
+        run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
+  audit:
+    needs: configuration
+    if: needs.configuration.outputs.enabled == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: preview
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PREVIEW_WORKER_NAME: ${{ needs.configuration.outputs.worker-name }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate audit inputs
+        run: |
+          [[ -n "$PREVIEW_WORKER_NAME" ]]
+          [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
+      - name: Audit Preview orphan candidates
+        run: python .github/scripts/preview_orphan_audit.py
+  skipped:
+    needs: configuration
+    if: needs.configuration.outputs.enabled != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Cloudflare Preview orphan audit skipped because it is disabled.' >> "$GITHUB_STEP_SUMMARY"

@@ -10,7 +10,10 @@
     "enabled": false,
     "projectPath": "",
     "deployCommand": "",
-    "previewEnvironmentEnabled": false
+    "previewEnvironmentEnabled": false,
+    "previewOrphanAuditEnabled": false,
+    "previewWorkerName": "",
+    "analysisArchiveEnabled": false
   },
   "deployments": {
     "development": false,

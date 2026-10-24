@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -54,6 +55,8 @@ def command(operation: str, branch: str) -> list[str]:
     if operation == "delete":
         args.append("delete")
     args.extend(["--name", preview_name(branch)])
+    if operation == "deploy":
+        args.append("--json")
     if operation == "delete":
         args.append("--skip-confirmation")
     return args
@@ -72,7 +75,37 @@ def run_preview(directory: Path, operation: str, branch: str, repository: str, n
     for name in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"):
         if not os.environ.get(name):
             raise ValueError(f"{name} is not configured")
-    subprocess.run(args, cwd=directory, check=True)
+    completed = subprocess.run(args, cwd=directory, check=True, text=True, capture_output=True)
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, end="", file=sys.stderr)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        lines = [f"## Cloudflare Preview {operation}", "", f"- Name: `{preview_name(branch)}`"]
+        if operation == "deploy":
+            try:
+                payload = json.loads(completed.stdout)
+            except json.JSONDecodeError:
+                payload = None
+            urls: list[str] = []
+
+            def visit(value: object) -> None:
+                if isinstance(value, dict):
+                    for item in value.values():
+                        visit(item)
+                elif isinstance(value, list):
+                    for item in value:
+                        visit(item)
+                elif isinstance(value, str) and value.startswith(("https://", "http://")):
+                    urls.append(value)
+
+            visit(payload)
+            if urls:
+                lines.append(f"- URL: {urls[0]}")
+            else:
+                lines.append("- URL: Wrangler output did not include a preview URL.")
+        Path(summary).write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Preview {operation} completed: {preview_name(branch)}")
     return True
 

@@ -1,21 +1,16 @@
 # CI品質ゲート
 
-Application CI/CDが全push、PRのopened/reopened/synchronize、手動実行を受け付けます。`reusable-ci.yml`のTest・Lint・Dependency・Securityは相互の`needs`を持たず並列実行し、最後の`ci`が全結果を検証します。
-
-以前はRegression testsとApplication CI/CDがそれぞれ`run_regression.py`を実行していました。現在は1イベントにつき4ゲートを1組だけ実行します。同じ変更のpush（head）とPR（GitHubのマージ結果）は異なる検証対象なので、両方を検査します。
+品質ゲートは、PRの作成・再オープン・更新（headブランチへのpush）時だけに、それぞれ独立して実行します。通常のブランチpushでは実行しません。
 
 ```text
-Application CI/CD
-  ci（再利用Workflow）
-    Test ────────┐
-    Lint ────────┤
-    Dependency ──┼─→ ci / ci ─→ Cloudflare preview / deploy
-    Security ────┘       └────→ Regression tests / regression
+Pull Request
+  ├─ Lint / lint
+  ├─ Dependency check / dependency-check
+  ├─ Test / test
+  └─ Security check / security-check
 ```
 
-`ci / ci`は`always()`で集約処理を実行し、4ゲートのfailure・cancelled・skipped・欠落をすべて失敗にします。各ゲートで実際に解決されたランタイムも検証し、成功後だけCloudflareの有効化・プロジェクトパス・デプロイコマンド・環境有効化outputsを公開します。Cloudflare jobの`needs: ci`は維持します。
-
-`regression.yml`は再利用Workflowとして集約結果を検証する軽量な互換チェックです。caller名`Regression tests`とjob ID `regression`により、Rulesetsが要求する`Regression tests / regression`を維持します。`ci / ci`も変更しません。stg/prodのRulesets・PRポリシーは変更しません。
+`stg`と`prod`のRulesetは4件すべてを必須チェックにします。どれかがfailure、cancelled、または未実行ならPRをマージできません。Cloudflare Previewはこれらの完了を待たず、同じPRイベントで独立して作成・更新します。Stg/Prodデプロイは、必須チェックを通過したPRのマージ後に、それぞれの対象ブランチへのpushで実行します。
 
 ## Test
 
@@ -37,7 +32,7 @@ Pythonは固定バージョンのRuff CLIと`ruff.toml`を使います。未使�
 
 固定パッケージには3日以内の更新を強制しません。現在の固定ポリシーでは`^`・`~`・`>=`などの範囲指定を許可せず、完全版との不一致を失敗にします。Nodeの推移依存はlockとnpmの整合性検査で管理します。Pythonプロジェクトを増やすときはfixed.pythonへmanifest/lockを追加します。Nodeプロジェクトは自動検出し、現在はnpm lockfile v2/v3を対象にしています。
 
-ランタイムはパッチ固定文字列ではなく、setup-python/setup-nodeが`check-latest: true`で選んだ実バージョンを比較します。4ゲートすべてのsetup出力を集約jobでも検証するため、Dependencyだけ新しいランタイムでも成功にはなりません。Dev Containerの広い指定（Python 3.12、Node 24）とポリシーの一致も確認します。CIがDev Containerの既存イメージを自動更新するわけではありません。手元の実行環境でDependencyゲートを実行すれば、その実バージョンを検査できます。イメージが古ければ再ビルドが必要です。
+ランタイムはパッチ固定文字列ではなく、各workflowのsetup-python/setup-nodeが`check-latest: true`で選んだ実バージョンを比較します。Dev Containerの広い指定（Python 3.12、Node 24）とポリシーの一致も確認します。CIがDev Containerの既存イメージを自動更新するわけではありません。手元の実行環境でDependencyゲートを実行すれば、その実バージョンを検査できます。イメージが古ければ再ビルドが必要です。
 
 公式データソースは次の2つです。
 

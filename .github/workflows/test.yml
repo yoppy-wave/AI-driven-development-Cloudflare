@@ -1,0 +1,29 @@
+name: Test
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          check-latest: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          check-latest: true
+      - name: Run tests
+        run: python .github/scripts/run_regression.py

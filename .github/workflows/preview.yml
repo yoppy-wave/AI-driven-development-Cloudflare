@@ -1,0 +1,48 @@
+name: Cloudflare Preview
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  configuration:
+    if: github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.config.outputs.preview_environment_enabled }}
+      project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - id: config
+        run: python .github/scripts/cicd_config.py github-output >> "$GITHUB_OUTPUT"
+  preview:
+    needs: configuration
+    if: needs.configuration.outputs.enabled == 'true'
+    uses: ./.github/workflows/reusable-cloudflare-preview.yml
+    with:
+      enabled: true
+      operation: deploy
+      project-path: ${{ needs.configuration.outputs.project-path }}
+      source-ref: ${{ github.event.pull_request.head.sha }}
+      preview-branch: ${{ github.event.pull_request.head.ref }}
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  skipped:
+    needs: configuration
+    if: always() && (needs.configuration.result == 'skipped' || needs.configuration.outputs.enabled != 'true')
+    runs-on: ubuntu-24.04
+    steps:
+      - run: echo 'Cloudflare Preview skipped because it is disabled or the PR is not trusted.' >> "$GITHUB_STEP_SUMMARY"
