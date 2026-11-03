@@ -15,12 +15,15 @@ concurrency:
 
 jobs:
   configuration:
-    if: github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    if: github.base_ref == 'stg' && (startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'fix/')) && github.event.pull_request.head.repo.full_name == github.repository && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       enabled: ${{ steps.config.outputs.preview_environment_enabled }}
       project-path: ${{ steps.config.outputs.cloudflare_project_path }}
+      hosting-provider: ${{ steps.config.outputs.cloudflare_hosting_provider }}
+      pages-project-name: ${{ steps.config.outputs.cloudflare_pages_project_name }}
+      pages-output-directory: ${{ steps.config.outputs.cloudflare_pages_output_directory }}
     steps:
       - name: リポジトリをチェックアウト
         uses: actions/checkout@v7
@@ -39,6 +42,10 @@ jobs:
       project-path: ${{ needs.configuration.outputs.project-path }}
       source-ref: ${{ github.event.pull_request.head.sha }}
       preview-branch: ${{ github.event.pull_request.head.ref }}
+      pr-number: ${{ github.event.pull_request.number }}
+      hosting-provider: ${{ needs.configuration.outputs.hosting-provider }}
+      pages-project-name: ${{ needs.configuration.outputs.pages-project-name }}
+      pages-output-directory: ${{ needs.configuration.outputs.pages-output-directory }}
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -48,4 +55,4 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: スキップ理由を表示
-        run: echo 'Cloudflare Preview skipped because it is disabled or the PR is not trusted.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Cloudflare Preview skipped because it is disabled or the PR is not a trusted feature/fix PR targeting stg.' >> "$GITHUB_STEP_SUMMARY"

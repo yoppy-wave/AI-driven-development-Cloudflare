@@ -20,13 +20,7 @@ Pythonの単一実装・設定ファイルを主に検証するテストは、�
 
 ## ブランチ運用
 
-### 個人開発（main中心）
-
-現在の初期状態では`main`を中心に運用できます。小さく自己完結した変更は、必要に応じて`main`上または短命な作業ブランチで進めます。将来の共同作業、レビュー、リリースを見据える場合は、早い段階からPRを使い、変更を小さく保ちます。
-
-`main`へのpushはApplication CI/CDのdevelopmentデプロイ入口ですが、現在は`.github/cicd/application.json`でCloudflare・デプロイが無効です。明示的に有効化されるまで、Cloudflare API Tokenを使う認証やデプロイコマンドは実行しません。
-
-### チーム開発（feature/fix → stg → prod）
+### 標準運用（feature/fix → stg → prod）
 
 GitHub Rulesetを有効化したチーム開発では、次の流れを使います。
 
@@ -41,7 +35,7 @@ stg を最新化
   → PO承認・CI成功後、リリース責任者が prod へマージ
 ```
 
-`stg`と`prod`へのマージはGitHub上のPRを通じて行います。RulesetとPRポリシーは、直接pushや許可されないPR元をサーバー側で拒否する設定です。詳細な有効化要件は[GitHubリポジトリの初回設定](github-repository-setup.md#2-ブランチとpr保護)を参照してください。
+`stg`が既定ブランチです。`stg`と`prod`へのマージはGitHub上のPRを通じて行います。RulesetとPRポリシーは、直接pushや許可されないPR元をサーバー側で拒否する設定です。詳細な有効化要件は[GitHubリポジトリの初回設定](github-repository-setup.md#2-ブランチとpr保護)を参照してください。
 
 ## ローカル検証
 

@@ -31,6 +31,21 @@ class CicdWorkflowTests(unittest.TestCase):
         self.assertIn("types: [closed]", cleanup)
         self.assertIn("ref: ${{ github.event.repository.default_branch }}", cleanup)
         self.assertNotIn("ref: ${{ github.event.pull_request.head.sha }}", cleanup)
+        for content in (preview, cleanup):
+            self.assertIn("'stg'", content)
+            self.assertIn("feature/", content)
+            self.assertIn("fix/", content)
+
+    def test_pages_deployments_build_before_using_the_validated_direct_upload_helper(self) -> None:
+        deploy = workflow("reusable-cloudflare-deploy.yml")
+        preview = workflow("reusable-cloudflare-preview.yml")
+        self.assertIn("hosting-provider", deploy)
+        self.assertIn("Build Pages application", deploy)
+        self.assertIn("cloudflare_pages.py deploy", deploy)
+        self.assertIn("deployment-branch: stg", workflow("deploy-staging.yml"))
+        self.assertIn("deployment-branch: prod", workflow("deploy-production.yml"))
+        self.assertIn("cloudflare_pages.py preview", preview)
+        self.assertIn("cloudflare_pages.py cleanup", preview)
 
     def test_deployment_and_archive_are_branch_specific_and_fail_closed(self) -> None:
         self.assertIn("branches: [stg]", workflow("deploy-staging.yml"))

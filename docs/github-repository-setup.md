@@ -11,7 +11,7 @@
 1. チーム開発では、Organization配下にリポジトリを作成します。個人開発では個人アカウント配下でも利用できます。
 2. 公開範囲（public / private / internal）は、ソースコード、Issue、Actionsログ、利用するSecretsの取り扱い方針に合わせて決めます。公開リポジトリでもSecretsの値は公開されませんが、workflowやログに秘密情報を出力しない運用が必要です。
 3. テンプレートから作成した場合も、不要な履歴や設定を引き継いでいないかを確認します。
-4. 初期段階の個人開発では、現在の既定ブランチである`main`を維持できます。チーム開発へ移行する時点で、以下のブランチ構成と保護を有効化します。
+4. テンプレートの標準ブランチは`stg`です。`stg`を既定ブランチ、`prod`をリリース専用ブランチとして使用し、以下のブランチ構成と保護を有効化します。
 
 ### メンバー・Team・権限
 
@@ -35,9 +35,7 @@ prod                    本番相当の安定ブランチ
 - 実装は`stg`から作成した`feature/<内容>`または`fix/<内容>`で行います。
 - 日常の変更は`feature/*`または`fix/*`から`stg`へのPRで取り込みます。
 - リリース可能なまとまりで`stg`から`prod`へのPRを作成します。
-- `prod`と`stg`はGitHub上またはローカルGitで作成してリモートへpushします。`prod`を既定ブランチにするかは、チームの移行方針に合わせて決めます。
-
-現在の個人開発での`main`中心の進め方は[開発ガイド](development-guide.md#個人開発main中心)を参照してください。
+- `prod`と`stg`はGitHub上またはローカルGitで作成してリモートへpushします。`stg`を既定ブランチにします。
 
 ### リポジトリ内の設定ファイル
 
@@ -125,20 +123,20 @@ Cloudflareデプロイを有効化する前に、プロジェクト管理者は�
 2. Cloudflareで対象サービスだけを操作できる最小権限のAPI Tokenを作成する。TokenやAccount IDをソース、workflow、ログへ書かない。
 3. GitHubの **Settings → Environments** で`preview`、`development`、`staging`、`production`を作成する。各Environmentに`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`のEnvironment Secretを設定する。R2解析アーカイブを使う場合は`production`に`R2_ANALYSIS_ARCHIVE_BUCKET` Environment Variableを追加する。
 4. `preview`、`staging`、`production`にはrequired reviewersを設定する。productionには承認者と必要なdeployment branch policyも設定する。developmentも組織方針に応じて承認・ブランチ制限を設定する。
-5. アプリ側にWrangler設定を追加し、`application.json`の`cloudflare.projectPath`と`cloudflare.deployCommand`を設定する。
-6. `cloudflare.enabled`、`previewEnvironmentEnabled`、`previewOrphanAuditEnabled`、`analysisArchiveEnabled`、`deployments`の必要な項目だけを明示的に`true`にする。Preview削除漏れ監査を有効にする場合は、同じ`cloudflare`設定で`previewWorkerName`も指定する。
+5. Workersを使う場合はアプリ側にWrangler設定を追加し、`application.json`の`cloudflare.projectPath`、`cloudflare.deployCommand`、`cloudflare.hosting.provider`を`workers`として設定する。Pagesを使う場合は、固定版Wranglerを含む`package.json`と`package-lock.json`を配置し、`provider`を`pages`、`projectName`をPagesプロジェクト名、`outputDirectory`をビルド出力先として設定する。
+6. `cloudflare.enabled`、`previewEnvironmentEnabled`、`previewOrphanAuditEnabled`、`analysisArchiveEnabled`、`deployments`の必要な項目だけを明示的に`true`にする。Preview削除漏れ監査を有効にできるのはWorkersだけで、同じ`cloudflare`設定で`previewWorkerName`も指定する。
 7. 承認済みの範囲で、対象環境を限定してCI/CDの挙動を確認する。
 
 再利用workflowは`workflow_call.secrets`で必要なSecret名を明示し、callerも`CLOUDFLARE_API_TOKEN`と`CLOUDFLARE_ACCOUNT_ID`だけを明示的に渡します。jobに割り当てたGitHub Environmentの同名Secretが優先されます。PR previewはfork外かつOWNER、MEMBER、COLLABORATORのPRだけが対象です。
 
-### ブランチ単位のWorkers Preview
+### ブランチ単位のWorkers / Pages Preview
 
-PR previewはCloudflare WorkersのPreviewsを使用します。通常環境向けの`deployCommand`は実行せず、専用workflowが次の処理を行います。
+PR Previewは同一リポジトリの`feature/*`または`fix/*`から`stg`へのPRだけが対象です。WorkersではCloudflare Workers Previewsを、PagesではDirect Uploadを使用します。通常環境向けのWorkers `deployCommand`はPreviewで実行しません。
 
 | イベント | 処理 |
 | --- | --- |
 | PR作成・再オープン・追加push | 品質ゲートを待たず、`npm ci`、任意の`build`スクリプト、`npx --no-install wrangler preview --name <環境名>`で作成・更新 |
-| PRマージ・マージせずクローズ | `npx --no-install wrangler preview delete --name <環境名> --skip-confirmation`で削除 |
+| PRマージ・マージせずクローズ | Workersでは`npx --no-install wrangler preview delete --name <環境名> --skip-confirmation`で削除。Pagesの制約は下記を参照 |
 
 命名は`.github/scripts/cloudflare_preview.py`の共通関数を使用します。ブランチ名の英数字以外を1文字ずつ`-`へ置換し、小文字化、先頭・末尾の`-`の除去、30文字への切り詰めを行い、`app-`を付けます。例えば`feature/login`は`app-feature-login`です。ハッシュ・PR番号は付けず、記号の違いによる名前の衝突は区別しません。
 
@@ -151,7 +149,9 @@ PR previewはCloudflare WorkersのPreviewsを使用します。通常環境向�
 
 作成と削除は同じPR単位の実行キューを使います。操作直前にGitHub APIで状態を再確認し、閉じたPRや古いコミットの作成・更新、再オープン済みPRの削除をスキップします。削除workflowは`pull_request_target: closed`を使いますが、PRコードはcheckoutしません。Cloudflare操作の失敗は成功扱いにせず、Actions上で失敗として報告します。
 
-PreviewのURLはPRコメントへ投稿せず、Preview workflowのJob Summaryにだけ表示します。毎週月曜09:00 UTCには`preview-orphan-audit.yml`が起動します。`previewOrphanAuditEnabled`が`false`ならCloudflare認証なしで成功終了し、`true`ならOpen PRとclosed PR由来のPreview候補を突合します。削除漏れ候補を検出した場合はJob Summaryへ一覧を出してworkflowを失敗にします。自動削除やIssue作成はしません。
+Pages PreviewはPR番号から`pr-<番号>`のPagesブランチを作成し、Job SummaryにブランチエイリアスとWranglerが返した不変URLを表示します。Cloudflare Pagesは特定ブランチの最新デプロイを確実に削除するAPIを提供しないため、PRクローズ時に削除成功を装いません。閉鎖後もブランチエイリアスが残る可能性をSummaryへ記録し、公開してよい内容だけをPreviewに含めます。
+
+PreviewのURLはPRコメントへ投稿しません。Workersを選択した場合だけ、毎週月曜09:00 UTCに`preview-orphan-audit.yml`が起動します。`previewOrphanAuditEnabled`が`false`ならCloudflare認証なしで成功終了し、`true`ならOpen PRとclosed PR由来のPreview候補を突合します。削除漏れ候補を検出した場合はJob Summaryへ一覧を出してworkflowを失敗にします。自動削除やIssue作成はしません。
 
 ### 本番デプロイと解析アーカイブ
 
@@ -182,7 +182,7 @@ PreviewのURLはPRコメントへ投稿せず、Preview workflowのJob Summary�
 
 - [ ] リポジトリの所有者と公開範囲を決定した
 - [ ] 管理者と通常開発者の権限を最小権限で設定した
-- [ ] `main`または採用する既定ブランチを確認した
+- [ ] `stg`を既定ブランチ、`prod`をリリース専用ブランチとして確認した
 - [ ] GitHub Actionsの実行方針とWorkflow permissionsを確認した
 - [ ] AI Issueワークフローを使う場合、必要なラベルとSecrets / variablesを設定した
 - [ ] APIキー、PAT、Cloudflare認証情報をリポジトリへ保存していない

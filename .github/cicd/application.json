@@ -10,6 +10,11 @@
     "enabled": false,
     "projectPath": "",
     "deployCommand": "",
+    "hosting": {
+      "provider": "workers",
+      "projectName": "",
+      "outputDirectory": ""
+    },
     "previewEnvironmentEnabled": false,
     "previewOrphanAuditEnabled": false,
     "previewWorkerName": "",

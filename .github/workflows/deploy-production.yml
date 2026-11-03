@@ -15,6 +15,9 @@ jobs:
       enabled: ${{ steps.config.outputs.production_enabled }}
       project-path: ${{ steps.config.outputs.cloudflare_project_path }}
       deploy-command: ${{ steps.config.outputs.cloudflare_deploy_command }}
+      hosting-provider: ${{ steps.config.outputs.cloudflare_hosting_provider }}
+      pages-project-name: ${{ steps.config.outputs.cloudflare_pages_project_name }}
+      pages-output-directory: ${{ steps.config.outputs.cloudflare_pages_output_directory }}
     steps:
       - name: リポジトリをチェックアウト
         uses: actions/checkout@v7
@@ -30,6 +33,10 @@ jobs:
       enabled: ${{ needs.configuration.outputs.enabled == 'true' }}
       project-path: ${{ needs.configuration.outputs.project-path }}
       deploy-command: ${{ needs.configuration.outputs.deploy-command }}
+      hosting-provider: ${{ needs.configuration.outputs.hosting-provider }}
+      pages-project-name: ${{ needs.configuration.outputs.pages-project-name }}
+      pages-output-directory: ${{ needs.configuration.outputs.pages-output-directory }}
+      deployment-branch: prod
       github-environment: production
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
