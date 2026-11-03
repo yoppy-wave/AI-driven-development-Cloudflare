@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 
 from cloudflare_preview import project_directory
+from cloudflare_pages import output_directory, project_directory as pages_project_directory
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = ROOT / ".github" / "cicd" / "application.json"
@@ -71,12 +72,27 @@ def validate(config: dict[str, object], root: Path = ROOT) -> dict[str, object]:
     if not isinstance(preview_worker_name, str):
         fail("cloudflare.previewWorkerName must be a string")
     archive_enabled = required_bool(cloudflare, "analysisArchiveEnabled", "cloudflare")
+    hosting = required_object(cloudflare.get("hosting", {"provider": "workers"}), "cloudflare.hosting")
+    provider = hosting.get("provider", "workers")
+    if provider not in ("workers", "pages"):
+        fail("cloudflare.hosting.provider must be workers or pages")
+    pages_project_name = hosting.get("projectName", "")
+    pages_output_directory = hosting.get("outputDirectory", "")
+    if provider == "pages":
+        if not isinstance(pages_project_name, str) or not pages_project_name:
+            fail("cloudflare.hosting.projectName must be a non-empty string for Pages")
+        if not NAME_PATTERN.fullmatch(pages_project_name):
+            fail("cloudflare.hosting.projectName must contain lowercase letters, digits, and hyphens, and start with a letter")
+        if not isinstance(pages_output_directory, str) or not pages_output_directory:
+            fail("cloudflare.hosting.outputDirectory must be a non-empty string for Pages")
     if preview_enabled and not enabled:
         fail("cloudflare.previewEnvironmentEnabled requires cloudflare.enabled to be true")
     if preview_audit_enabled and not preview_enabled:
         fail("cloudflare.previewOrphanAuditEnabled requires cloudflare.previewEnvironmentEnabled to be true")
     if preview_audit_enabled and not preview_worker_name:
         fail("cloudflare.previewWorkerName must be non-empty when cloudflare.previewOrphanAuditEnabled is true")
+    if preview_audit_enabled and provider != "workers":
+        fail("cloudflare.previewOrphanAuditEnabled requires provider workers")
     if archive_enabled and not enabled:
         fail("cloudflare.analysisArchiveEnabled requires cloudflare.enabled to be true")
     if enabled:
@@ -84,10 +100,12 @@ def validate(config: dict[str, object], root: Path = ROOT) -> dict[str, object]:
             fail("cloudflare.projectPath must be a non-empty relative path inside the repository when cloudflare.enabled is true")
         if not (root / project_path).is_dir():
             fail("cloudflare.projectPath must exist when cloudflare.enabled is true")
-        if not deploy_command.strip():
+        if provider == "workers" and not deploy_command.strip():
             fail("cloudflare.deployCommand must be non-empty when cloudflare.enabled is true")
-    if preview_enabled:
+    if provider == "workers" and preview_enabled:
         project_directory(root, project_path)
+    if provider == "pages" and enabled:
+        output_directory(pages_project_directory(root, project_path), pages_output_directory)
 
     deployments = required_object(config.get("deployments"), "deployments")
     for environment in ("development", "staging", "production"):
@@ -103,12 +121,16 @@ def values(config: dict[str, object]) -> dict[str, str]:
     ci = required_object(config["ci"], "ci")
     cloudflare = required_object(config["cloudflare"], "cloudflare")
     deployments = required_object(config["deployments"], "deployments")
+    hosting = required_object(cloudflare.get("hosting", {"provider": "workers"}), "cloudflare.hosting")
     result = {
         "application_name": str(application["name"]),
         "ci_enabled": str(ci["enabled"]).lower(),
         "cloudflare_enabled": str(cloudflare["enabled"]).lower(),
         "cloudflare_project_path": str(cloudflare["projectPath"]),
         "cloudflare_deploy_command": str(cloudflare["deployCommand"]),
+        "cloudflare_hosting_provider": str(hosting.get("provider", "workers")),
+        "cloudflare_pages_project_name": str(hosting.get("projectName", "")),
+        "cloudflare_pages_output_directory": str(hosting.get("outputDirectory", "")),
         "preview_environment_enabled": str(cloudflare["previewEnvironmentEnabled"]).lower(),
         "preview_orphan_audit_enabled": str(cloudflare["previewOrphanAuditEnabled"]).lower(),
         "preview_worker_name": str(cloudflare["previewWorkerName"]),

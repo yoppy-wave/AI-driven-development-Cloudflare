@@ -12,7 +12,19 @@ on:
         required: true
         type: string
       deploy-command:
-        description: Application-defined non-interactive Wrangler deployment command.
+        description: Application-defined non-interactive Workers deployment command.
+        required: true
+        type: string
+      hosting-provider:
+        required: true
+        type: string
+      pages-project-name:
+        required: true
+        type: string
+      pages-output-directory:
+        required: true
+        type: string
+      deployment-branch:
         required: true
         type: string
       github-environment:
@@ -43,18 +55,47 @@ jobs:
         env:
           PROJECT_PATH: ${{ inputs.project-path }}
           DEPLOY_COMMAND: ${{ inputs.deploy-command }}
+          HOSTING_PROVIDER: ${{ inputs.hosting-provider }}
+          PAGES_PROJECT_NAME: ${{ inputs.pages-project-name }}
+          PAGES_OUTPUT_DIRECTORY: ${{ inputs.pages-output-directory }}
+          DEPLOYMENT_BRANCH: ${{ inputs.deployment-branch }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           [[ -n "$PROJECT_PATH" && "$PROJECT_PATH" != /* && "$PROJECT_PATH" != *".."* ]]
-          [[ -d "$PROJECT_PATH" && -n "$DEPLOY_COMMAND" ]]
+          [[ -d "$PROJECT_PATH" ]]
+          [[ "$HOSTING_PROVIDER" == workers || "$HOSTING_PROVIDER" == pages ]]
           [[ -n "$CLOUDFLARE_API_TOKEN" && -n "$CLOUDFLARE_ACCOUNT_ID" ]]
-      - name: Deploy application with Wrangler
+      - name: Node.jsをセットアップ
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      - name: Install locked application dependencies
+        working-directory: ${{ inputs.project-path }}
+        run: npm ci
+      - name: Build Pages application
+        if: inputs.hosting-provider == 'pages'
+        working-directory: ${{ inputs.project-path }}
+        run: npm run build --if-present
+      - name: Deploy Workers application with Wrangler
+        if: inputs.hosting-provider == 'workers'
         working-directory: ${{ inputs.project-path }}
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: ${{ inputs.deploy-command }}
+      - name: Deploy Pages application with Wrangler
+        if: inputs.hosting-provider == 'pages'
+        env:
+          PROJECT_PATH: ${{ inputs.project-path }}
+          PAGES_PROJECT_NAME: ${{ inputs.pages-project-name }}
+          PAGES_OUTPUT_DIRECTORY: ${{ inputs.pages-output-directory }}
+          DEPLOYMENT_BRANCH: ${{ inputs.deployment-branch }}
+          SOURCE_REF: ${{ github.sha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: python .github/scripts/cloudflare_pages.py deploy
   skipped:
     if: ${{ !inputs.enabled }}
     runs-on: ubuntu-24.04
